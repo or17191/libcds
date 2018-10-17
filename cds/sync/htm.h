@@ -6,6 +6,8 @@
 #ifndef CDSLIB_SYNC_HTM_H
 #define CDSLIB_SYNC_HTM_H
 
+#ifdef __RTM__
+
 #include <utility>
 
 #include <immintrin.h>
@@ -59,7 +61,19 @@ namespace cds {
             fallback();
             return false;
         }
+
+        constexpr bool RTM_ENABLED = true;
     } // namespace sync
 } // namespace cds
+
+#elif // __RTM__
+
+namespace cds {
+    namespace sync {
+        constexpr bool RTM_ENABLED = false;
+    } // namespace sync
+} // namespace cds
+
+#endif // __RTM__
 
 #endif // #ifndef CDSLIB_SYNC_HTM_H
