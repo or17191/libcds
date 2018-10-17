@@ -51,10 +51,15 @@ namespace cds {
     } // namespace sync
 } // namespace cds
 
-#elif // __RTM__
+#else // __RTM__
 
 namespace cds {
     namespace sync {
+        template <class... Args>
+        bool htm(Args&&...) {
+          // Fast fail if don't have htm support
+          std::terminate();
+        }
         constexpr bool RTM_ENABLED = false;
     } // namespace sync
 } // namespace cds
