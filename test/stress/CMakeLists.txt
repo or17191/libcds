@@ -27,6 +27,7 @@ add_subdirectory(${CMAKE_CURRENT_SOURCE_DIR}/pqueue)
 add_subdirectory(${CMAKE_CURRENT_SOURCE_DIR}/queue)
 add_subdirectory(${CMAKE_CURRENT_SOURCE_DIR}/set)
 add_subdirectory(${CMAKE_CURRENT_SOURCE_DIR}/stack)
+add_subdirectory(${CMAKE_CURRENT_SOURCE_DIR}/sync)
 
 add_custom_target( stress-all
     DEPENDS
