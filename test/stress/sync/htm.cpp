@@ -42,7 +42,7 @@ namespace {
 
       public:
         static void SetUpTestCase() {
-            cds_test::config const &cfg = get_config("free_list");
+            cds_test::config const &cfg = get_config("htm");
 
             s_nThreadCount = cfg.get_size_t("ThreadCount", s_nThreadCount);
             s_nIncrementCount =
@@ -73,6 +73,8 @@ namespace {
             std::chrono::milliseconds duration = pool.run();
 
             propout() << std::make_pair("duration", duration);
+
+            std::cout << "[ MESSAGE  ] Total: " << nTotal << std::endl;
 
             // analyze result
 

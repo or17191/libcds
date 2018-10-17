@@ -21,16 +21,22 @@ namespace cds {
           Supports several retries, and failure handlers.
         */
         template <class Transaction, class Fallback>
-        bool htm(Transaction &&transaction, Fallback &&fallback = []{}) {
-            if (htm(std::forward<Transaction>(transaction))) {
+        bool htm(Transaction &&transaction, Fallback &&fallback) {
+            if (_xbegin() == _XBEGIN_STARTED) {
+                transaction();
+                _xend();
                 return true;
             } else {
-                fallback();
                 return false;
             }
         }
 
-        template <class Transaction, class Fallback
+        template <class Transaction>
+        bool htm(Transaction &&transaction) {
+            return htm(std::forward<Transaction>(transaction), []{});
+        }
+
+        template <class Transaction, class Fallback>
         bool htm(Transaction &&transaction, Fallback &&fallback, size_t tries) {
             for (size_t i = 0; i < tries; ++i) {
                 if (htm(std::forward<Transaction>(transaction))) {
