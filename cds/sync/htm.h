@@ -20,29 +20,8 @@ namespace cds {
           Wraps the details of the transaction managment.
           Supports several retries, and failure handlers.
         */
-        template <class Transaction>
-        bool htm(Transaction &&transaction) {
-            if (_xbegin() == _XBEGIN_STARTED) {
-                transaction();
-                _xend();
-                return true;
-            } else {
-                return false;
-            }
-        }
-
-        template <class Transaction>
-        bool htm(Transaction &&transaction, size_t tries) {
-            for (size_t i = 0; i < tries; ++i) {
-                if (htm(std::forward<Transaction>(transaction))) {
-                    return true;
-                }
-            }
-            return false;
-        }
-
         template <class Transaction, class Fallback>
-        bool htm(Transaction &&transaction, Fallback &&fallback) {
+        bool htm(Transaction &&transaction, Fallback &&fallback = []{}) {
             if (htm(std::forward<Transaction>(transaction))) {
                 return true;
             } else {
@@ -51,7 +30,7 @@ namespace cds {
             }
         }
 
-        template <class Transaction, class Fallback>
+        template <class Transaction, class Fallback
         bool htm(Transaction &&transaction, Fallback &&fallback, size_t tries) {
             for (size_t i = 0; i < tries; ++i) {
                 if (htm(std::forward<Transaction>(transaction))) {
@@ -60,6 +39,12 @@ namespace cds {
             }
             fallback();
             return false;
+        }
+
+
+        template <class Transaction>
+        bool htm(Transaction &&transaction, size_t tries) {
+          return htm(std::forward<Transaction>(transaction), []{}, tries);
         }
 
         constexpr bool RTM_ENABLED = true;
