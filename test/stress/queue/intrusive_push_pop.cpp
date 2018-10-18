@@ -375,6 +375,8 @@ namespace {
     CDSSTRESS_QUEUE_F( BasketQueue_DHP,      cds::intrusive::basket_queue::node<cds::gc::DHP> )
     CDSSTRESS_QUEUE_F( BasketQueue_DHP_ic,   cds::intrusive::basket_queue::node<cds::gc::DHP> )
     CDSSTRESS_QUEUE_F( BasketQueue_DHP_stat, cds::intrusive::basket_queue::node<cds::gc::DHP> )
+
+    CDSSTRESS_QUEUE_F( HTMBasketQueue_HP,       cds::intrusive::basket_queue::node<cds::gc::HP> )
 #undef CDSSTRESS_QUEUE_F
 
 

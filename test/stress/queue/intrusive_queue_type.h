@@ -11,6 +11,7 @@
 #include <cds/intrusive/optimistic_queue.h>
 #include <cds/intrusive/vyukov_mpmc_cycle_queue.h>
 #include <cds/intrusive/basket_queue.h>
+#include <cds/intrusive/htm_basket_queue.h>
 #include <cds/intrusive/fcqueue.h>
 #include <cds/intrusive/segmented_queue.h>
 
@@ -270,6 +271,7 @@ namespace queue {
             > ::type
         {};
         typedef cds::intrusive::BasketQueue< cds::gc::HP, T, traits_BasketQueue_HP > BasketQueue_HP;
+        typedef cds::intrusive::HTMBasketQueue< cds::gc::HP, T, traits_BasketQueue_HP > HTMBasketQueue_HP;
 
         struct traits_BasketQueue_HP_seqcst: public
             cds::intrusive::basket_queue::make_traits <
