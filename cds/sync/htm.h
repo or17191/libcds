@@ -22,13 +22,14 @@ namespace cds {
         */
         template <class Transaction, class Fallback>
         bool htm(Transaction &&transaction, Fallback &&fallback) {
-            if (_xbegin() == _XBEGIN_STARTED) {
+            bool ok = _xbegin() == _XBEGIN_STARTED;
+            if (ok) {
                 transaction();
                 _xend();
-                return true;
             } else {
-                return false;
+                fallback();
             }
+            return ok;
         }
 
         template <class Transaction>

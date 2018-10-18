@@ -5,7 +5,6 @@
 
 #include <cds_test/stress_test.h>
 
-#include <cds/compiler/defs.h>
 #include <cds/sync/htm.h>
 
 namespace {
@@ -31,11 +30,10 @@ namespace {
             virtual thread *clone() { return new Worker(*this); }
 
             virtual void test() {
+                auto& counter=m_counter;
                 for (size_t pass = 0; pass < s_nIncrementCount; ++pass) {
-                    auto res = cds::sync::htm([this] { m_counter++; });
-                    if (res) {
-                        ++m_nSuccess;
-                    }
+                    auto res = cds::sync::htm([&counter] { counter++; });
+                    m_nSuccess += res;
                 }
             }
         };
@@ -84,6 +82,7 @@ namespace {
                     static_cast<Worker &>(pool.get(threadNo)).m_nSuccess;
 
             EXPECT_EQ(nSuccess, nTotal);
+            EXPECT_NE(0, nTotal);
         }
     };
 
