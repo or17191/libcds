@@ -12,6 +12,7 @@
 #include <cds/container/optimistic_queue.h>
 #include <cds/container/vyukov_mpmc_cycle_queue.h>
 #include <cds/container/basket_queue.h>
+#include <cds/container/htm_basket_queue.h>
 #include <cds/container/fcqueue.h>
 #include <cds/container/fcdeque.h>
 #include <cds/container/segmented_queue.h>
@@ -381,6 +382,9 @@ namespace fc_details{
         typedef cds::container::BasketQueue< cds::gc::HP,  Value, traits_BasketQueue_stat > BasketQueue_HP_stat;
         typedef cds::container::BasketQueue< cds::gc::DHP, Value, traits_BasketQueue_stat > BasketQueue_DHP_stat;
 
+        // HTMBasketQueue
+
+        typedef cds::container::HTMBasketQueue< cds::gc::HP , Value > HTMBasketQueue_HP;
 
         // RWQueue
         typedef cds::container::RWQueue< Value > RWQueue_Spin;
@@ -791,6 +795,9 @@ namespace cds_test {
     CDSSTRESS_Queue_F( test_fixture, BasketQueue_DHP        ) \
     CDSSTRESS_Queue_F( test_fixture, BasketQueue_DHP_stat   ) \
     CDSSTRESS_BasketQueue_1( test_fixture )
+
+#define CDSSTRESS_HTMBasketQueue( test_fixture ) \
+    CDSSTRESS_Queue_F( test_fixture, HTMBasketQueue_HP         )
 
 #define CDSSTRESS_FCQueue( test_fixture ) \
     CDSSTRESS_Queue_F( test_fixture, FCQueue_deque              ) \

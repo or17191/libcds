@@ -147,6 +147,7 @@ namespace {
     CDSSTRESS_MSQueue( queue_push )
     CDSSTRESS_MoirQueue( queue_push )
     CDSSTRESS_BasketQueue( queue_push )
+    CDSSTRESS_HTMBasketQueue( queue_push )
     CDSSTRESS_OptimsticQueue( queue_push )
     CDSSTRESS_FCQueue( queue_push )
     CDSSTRESS_FCDeque( queue_push )
