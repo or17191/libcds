@@ -385,6 +385,8 @@ namespace fc_details{
         // HTMBasketQueue
 
         typedef cds::container::HTMBasketQueue< cds::gc::HP , Value > HTMBasketQueue_HP;
+        typedef cds::container::HTMBasketQueue< cds::gc::HP,  Value, traits_BasketQueue_ic > HTMBasketQueue_HP_ic;
+        typedef cds::container::HTMBasketQueue< cds::gc::HP,  Value, traits_BasketQueue_stat > HTMBasketQueue_HP_stat;
 
         // RWQueue
         typedef cds::container::RWQueue< Value > RWQueue_Spin;
@@ -755,6 +757,9 @@ namespace cds_test {
         CDSSTRESS_Queue_F( test_fixture, StdQueue_deque_Mutex   ) \
         CDSSTRESS_Queue_F( test_fixture, StdQueue_list_Mutex    ) \
 
+#   define CDSSTRESS_HTMBasketQueue_1( test_fixture ) \
+        CDSSTRESS_Queue_F( test_fixture, HTMBasketQueue_HP_ic      )
+
 #else
 #   define CDSSTRESS_MSQueue_1( test_fixture )
 #   define CDSSTRESS_MoirQueue_1( test_fixture )
@@ -766,6 +771,7 @@ namespace cds_test {
 #   define CDSSTRESS_RWQueue_1( test_fixture )
 #   define CDSSTRESS_SegmentedQueue_1( test_fixture )
 #   define CDSSTRESS_StdQueue_1( test_fixture )
+#   define CDSSTRESS_HTMBasketQueue_1( test_fixture )
 #endif
 
 #define CDSSTRESS_MSQueue( test_fixture ) \
@@ -797,7 +803,9 @@ namespace cds_test {
     CDSSTRESS_BasketQueue_1( test_fixture )
 
 #define CDSSTRESS_HTMBasketQueue( test_fixture ) \
-    CDSSTRESS_Queue_F( test_fixture, HTMBasketQueue_HP         )
+    CDSSTRESS_Queue_F( test_fixture, HTMBasketQueue_HP         ) \
+    CDSSTRESS_Queue_F( test_fixture, HTMBasketQueue_HP_stat    ) \
+    CDSSTRESS_HTMBasketQueue_1( test_fixture )
 
 #define CDSSTRESS_FCQueue( test_fixture ) \
     CDSSTRESS_Queue_F( test_fixture, FCQueue_deque              ) \

@@ -204,7 +204,7 @@ namespace cds { namespace container {
             > myQueue;
             \endcode
     */
-    template <typename GC, typename T, typename Traits = basket_queue::traits >
+    template <typename GC, typename T, typename Traits = htm_basket_queue::traits >
     class HTMBasketQueue:
 #ifdef CDS_DOXYGEN_INVOKED
         private intrusive::HTMBasketQueue< GC, intrusive::basket_queue::node< T >, Traits >

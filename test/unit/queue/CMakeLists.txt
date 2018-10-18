@@ -4,6 +4,7 @@ set(CDSGTEST_QUEUE_SOURCES
     ../main.cpp
     basket_queue_hp.cpp
     basket_queue_dhp.cpp
+    htm_basket_queue_hp.cpp
     fcqueue.cpp
     moirqueue_hp.cpp
     moirqueue_dhp.cpp
