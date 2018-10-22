@@ -59,8 +59,8 @@ namespace cds {
         }
 
         template <class... Args>
-        decltype(auto) abort(Args &&... args) {
-            return _xabort(std::forward<Args>(args)...);
+        void abort(Args &&... args) {
+            _xabort(std::forward<Args>(args)...);
         }
 
     } // namespace sync
