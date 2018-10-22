@@ -46,6 +46,8 @@ namespace {
         }
     };
 
+#ifdef CDS_HTM_SUPPORT
+
     TEST_F( IntrusiveHTMBasketQueue_HP, defaulted )
     {
         typedef cds::intrusive::HTMBasketQueue< gc_type, base_item_type,
@@ -170,6 +172,7 @@ namespace {
         gc_type::scan();
         check_array( arr );
     }
+#endif // CDS_HTM_SUPPORT
 
 } // namespace
 

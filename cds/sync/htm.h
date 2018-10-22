@@ -6,7 +6,11 @@
 #ifndef CDSLIB_SYNC_HTM_H
 #define CDSLIB_SYNC_HTM_H
 
-#ifdef __RTM__
+#if !defined( CDS_DISABLE_HTM ) && defined( __RTM__ )
+#    define CDS_HTM_SUPPORT
+#endif
+
+#ifdef CDS_HTM_SUPPORT
 
 #include <utility>
 #include <exception>
@@ -59,11 +63,10 @@ namespace cds {
             return _xabort(std::forward<Args>(args)...);
         }
 
-        constexpr bool RTM_ENABLED = true;
     } // namespace sync
 } // namespace cds
 
-#else // __RTM__
+#else // CDS_HTM_SUPPORT
 
 namespace cds {
     namespace sync {
@@ -76,10 +79,9 @@ namespace cds {
         void abort(Args &&...) {
             std::terminate();
         }
-        constexpr bool RTM_ENABLED = false;
     } // namespace sync
 } // namespace cds
 
-#endif // __RTM__
+#endif // CDS_HTM_SUPPORT
 
 #endif // #ifndef CDSLIB_SYNC_HTM_H

@@ -31,6 +31,7 @@ namespace {
         }
     };
 
+#ifdef CDS_HTM_SUPPORT
     TEST_F( HTMBasketQueue_HP, defaulted )
     {
         typedef cds::container::HTMBasketQueue< gc_type, int > test_queue;
@@ -110,6 +111,7 @@ namespace {
         test_queue q;
         test_string( q );
     }
+#endif // CDS_HTM_SUPPORT
 
 } // namespace
 

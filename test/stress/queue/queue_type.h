@@ -802,10 +802,14 @@ namespace cds_test {
     CDSSTRESS_Queue_F( test_fixture, BasketQueue_DHP_stat   ) \
     CDSSTRESS_BasketQueue_1( test_fixture )
 
+#ifdef CDS_HTM_SUPPORT
 #define CDSSTRESS_HTMBasketQueue( test_fixture ) \
     CDSSTRESS_Queue_F( test_fixture, HTMBasketQueue_HP         ) \
     CDSSTRESS_Queue_F( test_fixture, HTMBasketQueue_HP_stat    ) \
     CDSSTRESS_HTMBasketQueue_1( test_fixture )
+#else // CDS_HTM_SUPPORT
+#   define CDSSTRESS_HTMBasketQueue( test_fixture)
+#endif // CDS_HTM_SUPPORT
 
 #define CDSSTRESS_FCQueue( test_fixture ) \
     CDSSTRESS_Queue_F( test_fixture, FCQueue_deque              ) \

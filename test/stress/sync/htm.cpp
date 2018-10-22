@@ -55,10 +55,6 @@ namespace {
 
       protected:
         void test() {
-            constexpr_if(!cds::sync::RTM_ENABLED) {
-                std::cout << "[ SKIPPED  ] RTM is not supported" << std::endl;
-                return;
-            }
             cds_test::thread_pool &pool = get_pool();
 
             size_t nTotal = 0;
@@ -88,6 +84,7 @@ namespace {
 
     size_t htm::s_nThreadCount = 4;
     size_t htm::s_nIncrementCount = 100000;
-
+#ifdef CDS_HTM_SUPPORT
     TEST_F(htm, increment) { test(); }
+#endif // CDS_HTM_SUPPORT
 } // namespace
