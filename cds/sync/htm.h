@@ -9,6 +9,7 @@
 #ifdef __RTM__
 
 #include <utility>
+#include <exception>
 
 #include <immintrin.h>
 
@@ -34,7 +35,7 @@ namespace cds {
 
         template <class Transaction>
         bool htm(Transaction &&transaction) {
-            return htm(std::forward<Transaction>(transaction), []{});
+            return htm(std::forward<Transaction>(transaction), [] {});
         }
 
         template <class Transaction, class Fallback>
@@ -48,10 +49,14 @@ namespace cds {
             return false;
         }
 
-
         template <class Transaction>
         bool htm(Transaction &&transaction, size_t tries) {
-          return htm(std::forward<Transaction>(transaction), []{}, tries);
+            return htm(std::forward<Transaction>(transaction), [] {}, tries);
+        }
+
+        template <class... Args>
+        decltype(auto) abort(Args &&... args) {
+            return _xabort(std::forward<Args>(args)...);
         }
 
         constexpr bool RTM_ENABLED = true;
@@ -63,9 +68,13 @@ namespace cds {
 namespace cds {
     namespace sync {
         template <class... Args>
-        bool htm(Args&&...) {
-          // Fast fail if don't have htm support
-          std::terminate();
+        bool htm(Args &&...) {
+            // Fast fail if don't have htm support
+            std::terminate();
+        }
+        template <class... Args>
+        void abort(Args &&...) {
+            std::terminate();
         }
         constexpr bool RTM_ENABLED = false;
     } // namespace sync
