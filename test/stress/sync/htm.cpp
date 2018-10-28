@@ -33,7 +33,7 @@ namespace {
                 auto& counter=m_counter;
                 for (size_t pass = 0; pass < s_nIncrementCount; ++pass) {
                     auto res = cds::sync::htm([&counter] { counter++; });
-                    m_nSuccess += res;
+                    m_nSuccess += static_cast<bool>(res);
                 }
             }
         };

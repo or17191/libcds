@@ -21,29 +21,45 @@ namespace cds {
     /// Synchronization primitives
     namespace sync {
         /// HTM transaction utility
+        
+        class htm_status {
+        public:
+          using int_type = decltype(_xbegin());
+          explicit htm_status(int_type s): m_status(s) {}
+
+          bool started() const { return m_status == _XBEGIN_STARTED; }
+          explicit operator bool() const { return started(); }
+
+          bool explicit_() const { return m_status & _XABORT_EXPLICIT != 0; }
+          uint8_t explicit_code() const { return static_cast<uint8_t>(_XABORT_CODE(m_status)); }
+
+        private:
+          int_type m_status;
+        };
+
         /**
           Wraps the details of the transaction managment.
           Supports several retries, and failure handlers.
         */
         template <class Transaction, class Fallback>
-        bool htm(Transaction &&transaction, Fallback &&fallback) {
-            bool ok = _xbegin() == _XBEGIN_STARTED;
-            if (ok) {
+        htm_status htm(Transaction &&transaction, Fallback &&fallback) {
+            htm_status status(_xbegin());
+            if (status) {
                 transaction();
                 _xend();
             } else {
                 fallback();
             }
-            return ok;
+            return status;
         }
 
         template <class Transaction>
-        bool htm(Transaction &&transaction) {
+        htm_status htm(Transaction &&transaction) {
             return htm(std::forward<Transaction>(transaction), [] {});
         }
 
         template <class Transaction, class Fallback>
-        bool htm(Transaction &&transaction, Fallback &&fallback, size_t tries) {
+        htm_status htm(Transaction &&transaction, Fallback &&fallback, size_t tries) {
             for (size_t i = 0; i < tries; ++i) {
                 if (htm(std::forward<Transaction>(transaction))) {
                     return true;
@@ -54,7 +70,7 @@ namespace cds {
         }
 
         template <class Transaction>
-        bool htm(Transaction &&transaction, size_t tries) {
+        htm_status htm(Transaction &&transaction, size_t tries) {
             return htm(std::forward<Transaction>(transaction), [] {}, tries);
         }
 
@@ -70,8 +86,23 @@ namespace cds {
 
 namespace cds {
     namespace sync {
+        class htm_status {
+        public:
+          using int_type = unsigned int;
+          explicit htm_status(int_type s): m_status(s) {}
+
+          bool started() const { return false; }
+          explicit operator bool() const { return started(); }
+
+          bool explicit_() const { return false; }
+          uint8_t explicit_code() const { return 0; }
+
+        private:
+          int_type m_status;
+        };
+
         template <class... Args>
-        bool htm(Args &&...) {
+        htm_status htm(Args &&...) {
             // Fast fail if don't have htm support
             std::terminate();
         }
