@@ -3,6 +3,7 @@ set(PACKAGE_NAME stress-sync)
 set(CDSSTRESS_SYNC_SOURCES
     ../main.cpp
     htm.cpp
+    counter_inc.cpp
 )
 
 include_directories(
