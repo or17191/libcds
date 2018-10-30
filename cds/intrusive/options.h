@@ -157,6 +157,16 @@ namespace cds { namespace intrusive {
             //@endcond
         };
         //@endcond
+
+        template <typename Type>
+        struct insert_policy {
+            //@cond
+            template <typename Base> struct pack: public Base
+            {
+                typedef Type insert_policy;
+            };
+            //@endcond
+        };
     } // namespace opt
 
 }} // namespace cds::intrusive

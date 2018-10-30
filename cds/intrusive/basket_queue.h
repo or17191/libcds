@@ -200,6 +200,14 @@ namespace cds { namespace intrusive {
             //@endcond
         };
 
+        /// Atomics based insert policy
+        struct atomics_insert {
+          template <class MemoryModel, class Atomic, class Value>
+          static bool _(Atomic& var, Value& old, Value new_) {
+            return var.compare_exchange_weak(old, new_, MemoryModel::memory_order_release, MemoryModel::memory_order_relaxed);
+          }
+        };
+
         /// BasketQueue default type traits
         struct traits
         {
@@ -228,6 +236,8 @@ namespace cds { namespace intrusive {
                 or \p opt::v::sequential_consistent (sequentially consisnent memory model).
             */
             typedef opt::v::relaxed_ordering        memory_model;
+
+            typedef atomics_insert    insert_policy;
 
             /// Link checking, see \p cds::opt::link_checker
             static constexpr const opt::link_check_type link_checker = opt::debug_check_link;
@@ -423,6 +433,7 @@ namespace cds { namespace intrusive {
         typedef typename traits::item_counter   item_counter; ///< Item counting policy used
         typedef typename traits::stat           stat;         ///< Internal statistics policy used
         typedef typename traits::memory_model   memory_model; ///< Memory ordering. See cds::opt::memory_model option
+        typedef typename traits::insert_policy insert_policy;
 
         /// Rebind template arguments
         template <typename GC2, typename T2, typename Traits2>
@@ -643,7 +654,7 @@ namespace cds { namespace intrusive {
 
                 if ( pNext.ptr() == nullptr ) {
                     pNew->m_pNext.store( marked_ptr(), memory_model::memory_order_relaxed );
-                    if ( t->m_pNext.compare_exchange_weak( pNext, marked_ptr(pNew), memory_model::memory_order_release, atomics::memory_order_relaxed )) {
+                    if (insert_policy::template _<memory_model>(t->m_pNext, pNext, marked_ptr(pNew))) {
                         if ( !m_pTail.compare_exchange_strong( t, marked_ptr(pNew), memory_model::memory_order_release, atomics::memory_order_relaxed ))
                             m_Stat.onAdvanceTailFailed();
                         break;

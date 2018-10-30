@@ -50,6 +50,8 @@ namespace cds { namespace container {
             */
             typedef opt::v::relaxed_ordering    memory_model;
 
+            typedef cds::intrusive::basket_queue::atomics_insert    insert_policy;
+
             /// Padding for internal critical atomic data. Default is \p opt::cache_line_padding
             enum { padding = opt::cache_line_padding };
         };
