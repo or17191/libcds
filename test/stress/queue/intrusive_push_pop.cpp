@@ -6,6 +6,7 @@
 #include "intrusive_queue_type.h"
 #include <vector>
 #include <algorithm>
+#include <unordered_map>
 
 // Multi-threaded random queue test
 namespace {
@@ -281,8 +282,30 @@ namespace {
             }
         }
 
-        template <class Queue>
-        void test( Queue& q, value_array<typename Queue::value_type>& arrValue, size_t nLeftOffset, size_t nRightOffset )
+        template <class Queue, class It>
+        void check_baskets(It first, It last, std::true_type) {
+          std::unordered_map<cds::uuid_type, size_t> baskets;
+          for(; first != last; ++first) {
+            auto node_ptr = Queue::node_traits::to_node_ptr(*first);
+            baskets[node_ptr->m_basket_id]++;
+          }
+          size_t mean = 0;
+          size_t var = 0;
+          for(const auto& basket: baskets) {
+            size_t count = basket.second;
+            mean += count;
+            var += count * count;
+          }
+          propout() << std::make_pair("basket_count", baskets.size())
+                    << std::make_pair("basket_mean", double(mean) / baskets.size())
+                    << std::make_pair("basket_std", std::sqrt(double(var - mean) / baskets.size()));
+        }
+
+        template <class Queue, class It>
+        void check_baskets(It first, It last, std::false_type) {}
+
+        template <class Queue, class HasBaskets = std::false_type>
+        void test( Queue& q, value_array<typename Queue::value_type>& arrValue, size_t nLeftOffset, size_t nRightOffset, HasBaskets has_baskets = {} )
         {
             s_nThreadPushCount = s_nQueueSize / s_nWriterThreadCount;
             s_nQueueSize = s_nThreadPushCount * s_nWriterThreadCount;
@@ -332,6 +355,8 @@ namespace {
             analyze( q, nLeftOffset, nRightOffset );
 
             propout() << q.statistics();
+
+            check_baskets<Queue>(pValStart, pValEnd, has_baskets);
         }
     };
 
@@ -368,6 +393,20 @@ namespace {
     CDSSTRESS_QUEUE_F( OptimisticQueue_DHP,      cds::intrusive::optimistic_queue::node<cds::gc::DHP> )
     CDSSTRESS_QUEUE_F( OptimisticQueue_DHP_ic,   cds::intrusive::optimistic_queue::node<cds::gc::DHP> )
     CDSSTRESS_QUEUE_F( OptimisticQueue_DHP_stat, cds::intrusive::optimistic_queue::node<cds::gc::DHP> )
+#undef CDSSTRESS_QUEUE_F
+
+#define CDSSTRESS_QUEUE_F( QueueType, NodeType ) \
+    TEST_F( intrusive_queue_push_pop, QueueType ) \
+    { \
+        typedef value_type<NodeType> node_type; \
+        typedef typename queue::Types< node_type >::QueueType queue_type; \
+        value_array<typename queue_type::value_type> arrValue( s_nQueueSize ); \
+        { \
+            queue_type q; \
+            test( q, arrValue, 0, 0 , std::true_type{}); \
+        } \
+        queue_type::gc::force_dispose(); \
+    }
 
     CDSSTRESS_QUEUE_F( BasketQueue_HP,       cds::intrusive::basket_queue::node<cds::gc::HP> )
     CDSSTRESS_QUEUE_F( BasketQueue_HP_ic,    cds::intrusive::basket_queue::node<cds::gc::HP> )
