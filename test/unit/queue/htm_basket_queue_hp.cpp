@@ -43,7 +43,7 @@ namespace {
     TEST_F( HTMBasketQueue_HP, item_counting )
     {
         typedef cds::container::HTMBasketQueue < gc_type, int,
-            typename cds::container::htm_basket_queue::make_traits <
+            typename cds::container::basket_queue::make_traits <
                 cds::opt::item_counter < cds::atomicity::item_counter >
             > ::type
         > test_queue;
@@ -55,7 +55,7 @@ namespace {
     TEST_F( HTMBasketQueue_HP, relaxed )
     {
         typedef cds::container::HTMBasketQueue < gc_type, int,
-            typename cds::container::htm_basket_queue::make_traits <
+            typename cds::container::basket_queue::make_traits <
                 cds::opt::item_counter< cds::atomicity::item_counter >
                 , cds::opt::memory_model < cds::opt::v::relaxed_ordering >
             > ::type
@@ -68,7 +68,7 @@ namespace {
     TEST_F( HTMBasketQueue_HP, aligned )
     {
         typedef cds::container::HTMBasketQueue < gc_type, int,
-            typename cds::container::htm_basket_queue::make_traits <
+            typename cds::container::basket_queue::make_traits <
                 cds::opt::memory_model< cds::opt::v::relaxed_ordering>
                 , cds::opt::padding < 32 >
             >::type
@@ -80,7 +80,7 @@ namespace {
 
     TEST_F( HTMBasketQueue_HP, seq_cst )
     {
-        struct traits : public cc::htm_basket_queue::traits
+        struct traits : public cc::basket_queue::traits
         {
             typedef cds::opt::v::sequential_consistent memory_model;
             typedef cds::atomicity::item_counter item_counter;
@@ -102,7 +102,7 @@ namespace {
 
     TEST_F( HTMBasketQueue_HP, move_item_counting )
     {
-        struct traits : public cc::htm_basket_queue::traits
+        struct traits : public cc::basket_queue::traits
         {
             typedef cds::atomicity::item_counter item_counter;
         };

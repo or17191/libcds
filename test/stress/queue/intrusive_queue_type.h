@@ -271,6 +271,7 @@ namespace queue {
             > ::type
         {};
         typedef cds::intrusive::BasketQueue< cds::gc::HP, T, traits_BasketQueue_HP > BasketQueue_HP;
+
         typedef cds::intrusive::HTMBasketQueue< cds::gc::HP, T, traits_BasketQueue_HP > HTMBasketQueue_HP;
 
         struct traits_BasketQueue_HP_seqcst: public
@@ -304,6 +305,7 @@ namespace queue {
             > ::type
         {};
         typedef cds::intrusive::BasketQueue< cds::gc::HP, T, traits_BasketQueue_HP_ic > BasketQueue_HP_ic;
+
         typedef cds::intrusive::HTMBasketQueue< cds::gc::HP, T, traits_BasketQueue_HP_ic > HTMBasketQueue_HP_ic;
 
         struct traits_BasketQueue_DHP_ic : public
@@ -322,6 +324,7 @@ namespace queue {
             > ::type
         {};
         typedef cds::intrusive::BasketQueue< cds::gc::HP, T, traits_BasketQueue_HP_stat > BasketQueue_HP_stat;
+
         typedef cds::intrusive::HTMBasketQueue< cds::gc::HP, T, traits_BasketQueue_HP_stat > HTMBasketQueue_HP_stat;
 
         struct traits_BasketQueue_DHP_stat : public

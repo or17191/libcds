@@ -8,38 +8,35 @@
 
 #include <type_traits>
 
-#include <cds/details/marked_ptr.h>
 #include <cds/intrusive/basket_queue.h>
-#include <cds/intrusive/details/single_link_struct.h>
 #include <cds/sync/htm.h>
 
 namespace cds { namespace intrusive {
 
     namespace htm_basket_queue {
       struct htm_insert {
-        template <class MemoryModel, class Atomic, class Value>
-        static bool _(Atomic& var, Value& old, Value new_) {
+        template <class MemoryModel, class Atomic, class OldValue, class NewValue>
+        static bool _(Atomic& var, OldValue& old, NewValue&& new_) {
           auto transaction = [&] {
               if (var.load(MemoryModel::memory_order_relaxed) != old) {
                   sync::abort(0xff);
               }
-              var.store(new_, MemoryModel::memory_order_relaxed);
+              var.store(std::forward<NewValue>(new_), MemoryModel::memory_order_relaxed);
           };
           return static_cast<bool>(sync::htm(transaction));
         }
       };
 
-      struct traits : public cds::intrusive::basket_queue::traits {
-        typedef htm_insert insert_policy;
-      }; 
+      struct traits : opt::insert_policy<htm_insert>::template pack<basket_queue::traits> {};
     }
 
     template <typename GC, typename T, typename Traits = htm_basket_queue::traits>
-    class HTMBasketQueue: public BasketQueue<GC, T, Traits> {
+    class HTMBasketQueue: public BasketQueue<GC, T, opt::insert_policy<htm_basket_queue::htm_insert>::template pack<Traits>> {
     private:
-      typedef BasketQueue<GC, T, Traits> base_type;
+      typedef BasketQueue<GC, T, opt::insert_policy<htm_basket_queue::htm_insert>::template pack<Traits>> base_type;
     public:
       using base_type::base_type;
+      static_assert(std::is_same<typename base_type::insert_policy, htm_basket_queue::htm_insert>::value, "Must use htm_insert");
     };
 
 }} // namespace cds::intrusive
