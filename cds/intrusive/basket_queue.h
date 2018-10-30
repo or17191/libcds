@@ -9,6 +9,7 @@
 #include <type_traits>
 #include <cds/intrusive/details/single_link_struct.h>
 #include <cds/details/marked_ptr.h>
+#include <cds/algo/uuid.h>
 
 namespace cds { namespace intrusive {
 
@@ -39,8 +40,9 @@ namespace cds { namespace intrusive {
             };
 
             atomic_marked_ptr m_pNext ; ///< pointer to the next node in the container
+            uuid_type m_basket_id;
 
-            node()
+            node() : m_basket_id(uuid())
             {
                 m_pNext.store( marked_ptr(), atomics::memory_order_release );
             }
@@ -674,6 +676,11 @@ namespace cds { namespace intrusive {
                     {
                         bkoff();
                         pNew->m_pNext.store( pNext, memory_model::memory_order_relaxed );
+                        if (pNext != nullptr) {
+                          pNew->m_basket_id = pNext->m_basket_id;
+                        } else {
+                          pNew->m_basket_id = uuid();
+                        }
                         if ( t->m_pNext.compare_exchange_weak( pNext, marked_ptr( pNew ), memory_model::memory_order_release, atomics::memory_order_relaxed )) {
                             m_Stat.onAddBasket();
                             break;
