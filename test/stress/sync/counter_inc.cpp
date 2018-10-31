@@ -100,7 +100,7 @@ namespace {
         auto tmp = counter.load(atomics::memory_order_acquire);
         spin(1000);
         auto res = cds::sync::htm([&] {
-          if (tmp != counter.load(atomics::memory_order_relaxed)) cds::sync::abort(0xff); 
+          if (tmp != counter.load(atomics::memory_order_relaxed)) cds::sync::abort<0xff>();
           counter.store(tmp + 1, atomics::memory_order_relaxed);
         });
         return static_cast<bool>(res);

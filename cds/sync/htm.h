@@ -74,9 +74,9 @@ namespace cds {
             return htm(std::forward<Transaction>(transaction), [] {}, tries);
         }
 
-        template <class... Args>
-        void abort(Args &&... args) {
-            _xabort(std::forward<Args>(args)...);
+        template <uint8_t Value>
+        void abort() {
+            _xabort(Value);
         }
 
     } // namespace sync

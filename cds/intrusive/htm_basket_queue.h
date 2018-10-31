@@ -19,7 +19,7 @@ namespace cds { namespace intrusive {
         static bool _(Atomic& var, OldValue& old, NewValue&& new_) {
           auto transaction = [&] {
               if (var.load(MemoryModel::memory_order_relaxed) != old) {
-                  sync::abort(0xff);
+                  sync::abort<0xff>();
               }
               var.store(std::forward<NewValue>(new_), MemoryModel::memory_order_relaxed);
           };
