@@ -670,17 +670,14 @@ namespace cds { namespace intrusive {
                     pNext = gNext.protect( t->m_pNext, []( marked_ptr p ) -> value_type * { return node_traits::to_value_ptr( p.ptr());});
 
                     // add to the basket
-                    if ( m_pTail.load( memory_model::memory_order_relaxed ) == t
+                    if ( pNext != nullptr // Don't know why that happens
+                         && m_pTail.load( memory_model::memory_order_relaxed ) == t
                          && t->m_pNext.load( memory_model::memory_order_relaxed) == pNext
                          && !pNext.bits())
                     {
                         bkoff();
                         pNew->m_pNext.store( pNext, memory_model::memory_order_relaxed );
-                        if (pNext != nullptr) {
-                          pNew->m_basket_id = pNext->m_basket_id;
-                        } else {
-                          pNew->m_basket_id = uuid();
-                        }
+                        pNew->m_basket_id = pNext->m_basket_id;
                         if ( t->m_pNext.compare_exchange_weak( pNext, marked_ptr( pNew ), memory_model::memory_order_release, atomics::memory_order_relaxed )) {
                             m_Stat.onAddBasket();
                             break;
