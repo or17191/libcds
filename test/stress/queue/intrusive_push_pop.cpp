@@ -289,16 +289,24 @@ namespace {
             auto node_ptr = Queue::node_traits::to_node_ptr(*first);
             baskets[node_ptr->m_basket_id]++;
           }
-          size_t mean = 0;
-          size_t var = 0;
-          for(const auto& basket: baskets) {
-            size_t count = basket.second;
-            mean += count;
-            var += count * count;
+          size_t null_basket = 0;
+          {
+            auto it = baskets.find(0);
+            if (it != baskets.end()) {
+              null_basket = it->second;
+              baskets.erase(it);
+            }
           }
-          propout() << std::make_pair("basket_count", baskets.size())
-                    << std::make_pair("basket_mean", double(mean) / baskets.size())
-                    << std::make_pair("basket_std", std::sqrt(double(var - mean) / baskets.size()));
+          propout() << std::make_pair("null_basket", null_basket);
+          std::map<size_t, size_t> distribution;
+          for(const auto& basket: baskets) {
+            distribution[basket.second]++;
+          }
+          std::stringstream s;
+          for(const auto& cell: distribution) {
+            s << '(' << cell.first << ',' << cell.second << ')';
+          }
+          propout() << std::make_pair("basket_distribution", s.str());
         }
 
         template <class Queue, class It>
