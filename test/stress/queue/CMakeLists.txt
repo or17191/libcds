@@ -17,6 +17,7 @@ set(CDSSTRESS_QUEUE_PUSH stress-queue-push)
 set(CDSSTRESS_QUEUE_PUSH_SOURCES
     ../main.cpp
     push.cpp
+    intrusive_push.cpp
 )
 add_executable(${CDSSTRESS_QUEUE_PUSH} ${CDSSTRESS_QUEUE_PUSH_SOURCES})
 target_link_libraries(${CDSSTRESS_QUEUE_PUSH} ${CDS_TEST_LIBRARIES} ${CDSSTRESS_FRAMEWORK_LIBRARY})
@@ -74,4 +75,4 @@ add_custom_target( stress-queue
         ${CDSSTRESS_QUEUE_RANDOM}
         ${CDSSTRESS_QUEUE_BOUNDED}
         ${CDSSTRESS_SPSC_QUEUE}
-)        
+)
