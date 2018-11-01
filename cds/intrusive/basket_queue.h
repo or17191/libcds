@@ -129,6 +129,7 @@ namespace cds { namespace intrusive {
             counter_type m_TryAddBasket;    ///< Count of attemps adding new item to a basket (only or BasketQueue, for other queue this metric is not used)
             counter_type m_AddBasketCount;  ///< Count of events "Enqueue a new item into basket" (only or BasketQueue, for other queue this metric is not used)
             counter_type m_EmptyDequeue;    ///< Count of dequeue from empty queue
+            counter_type m_NullBasket;      ///< Count of number of insertions to empty basket
 
             /// Register enqueue call
             void onEnqueue()                { ++m_EnqueueCount; }
@@ -148,6 +149,8 @@ namespace cds { namespace intrusive {
             void onAddBasket()              { ++m_AddBasketCount; }
             /// Register dequeuing from empty queue
             void onEmptyDequeue()           { ++m_EmptyDequeue; }
+            /// Register insertion to null basket
+            void onNullBasket()             { ++m_NullBasket; }
 
 
             //@cond
@@ -162,6 +165,7 @@ namespace cds { namespace intrusive {
                 m_TryAddBasket.reset();
                 m_AddBasketCount.reset();
                 m_EmptyDequeue.reset();
+                m_NullBasket.reset();
             }
 
             stat& operator +=( stat const& s )
@@ -175,6 +179,7 @@ namespace cds { namespace intrusive {
                 m_TryAddBasket  += s.m_TryAddBasket.get();
                 m_AddBasketCount += s.m_AddBasketCount.get();
                 m_EmptyDequeue  += s.m_EmptyDequeue.get();
+                m_NullBasket    += s.m_NullBasket.get();
                 return *this;
             }
             //@endcond
@@ -193,6 +198,7 @@ namespace cds { namespace intrusive {
             void onTryAddBasket()       const {}
             void onAddBasket()          const {}
             void onEmptyDequeue()       const {}
+            void onNullBasket()         const {}
 
             void reset() {}
             empty_stat& operator +=( empty_stat const& )
@@ -670,15 +676,17 @@ namespace cds { namespace intrusive {
                     pNext = gNext.protect( t->m_pNext, []( marked_ptr p ) -> value_type * { return node_traits::to_value_ptr( p.ptr());});
 
                     // add to the basket
-                    if ( pNext != nullptr // Don't know why that happens
-                         && m_pTail.load( memory_model::memory_order_relaxed ) == t
+                    if ( m_pTail.load( memory_model::memory_order_relaxed ) == t
                          && t->m_pNext.load( memory_model::memory_order_relaxed) == pNext
                          && !pNext.bits())
                     {
                         bkoff();
                         pNew->m_pNext.store( pNext, memory_model::memory_order_relaxed );
-                        pNew->m_basket_id = pNext->m_basket_id;
+                        pNew->m_basket_id = (pNext != nullptr) ? pNext->m_basket_id : uuid();
                         if ( t->m_pNext.compare_exchange_weak( pNext, marked_ptr( pNew ), memory_model::memory_order_release, atomics::memory_order_relaxed )) {
+                            if (pNext == nullptr) {
+                              m_Stat.onNullBasket();
+                            }
                             m_Stat.onAddBasket();
                             break;
                         }

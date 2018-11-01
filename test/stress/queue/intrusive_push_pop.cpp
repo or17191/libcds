@@ -289,15 +289,6 @@ namespace {
             auto node_ptr = Queue::node_traits::to_node_ptr(*first);
             baskets[node_ptr->m_basket_id]++;
           }
-          size_t null_basket = 0;
-          {
-            auto it = baskets.find(0);
-            if (it != baskets.end()) {
-              null_basket = it->second;
-              baskets.erase(it);
-            }
-          }
-          propout() << std::make_pair("null_basket", null_basket);
           std::map<size_t, size_t> distribution;
           for(const auto& basket: baskets) {
             distribution[basket.second]++;

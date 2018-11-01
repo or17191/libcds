@@ -20,7 +20,8 @@ namespace cds_test {
             << CDSSTRESS_STAT_OUT( s, m_AdvanceTailError )
             << CDSSTRESS_STAT_OUT( s, m_BadTail )
             << CDSSTRESS_STAT_OUT( s, m_TryAddBasket )
-            << CDSSTRESS_STAT_OUT( s, m_AddBasketCount );
+            << CDSSTRESS_STAT_OUT( s, m_AddBasketCount )
+            << CDSSTRESS_STAT_OUT( s, m_NullBasket );
     }
 
     static inline property_stream& operator <<( property_stream& o, cds::intrusive::basket_queue::empty_stat const& /*s*/ )
