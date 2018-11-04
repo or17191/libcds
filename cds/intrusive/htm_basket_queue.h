@@ -23,7 +23,14 @@ namespace cds { namespace intrusive {
               }
               var.store(std::forward<NewValue>(new_), MemoryModel::memory_order_relaxed);
           };
-          return static_cast<bool>(sync::htm(transaction));
+          sync::htm_status status;
+          do {
+            status = sync::htm(transaction);
+            if (status) {
+              return true;
+            }
+          } while (!status.explicit_() && !(status.conflict() && !status.retry()));
+          return false;
         }
       };
 

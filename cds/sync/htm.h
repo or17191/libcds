@@ -99,11 +99,19 @@ namespace cds {
           using int_type = unsigned int;
           explicit htm_status(int_type s): m_status(s) {}
 
+          int_type status() const { return m_status; }
+
           bool started() const { return false; }
           explicit operator bool() const { return started(); }
 
           bool explicit_() const { return false; }
           uint8_t explicit_code() const { return 0; }
+
+          bool retry   () const { return false; }
+          bool conflict() const { return false; }
+          bool capacity() const { return false; }
+          bool debug   () const { return false; }
+          bool nested  () const { return false; }
 
         private:
           int_type m_status;
