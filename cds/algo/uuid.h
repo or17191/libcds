@@ -7,8 +7,9 @@
 #define CDSLIB_UUID_H
 
 #include <random>
-#include <thread>
 #include <climits>
+
+#include <cds/threading/details/auto_detect.h>
 
 namespace cds { namespace rand { 
 
@@ -38,11 +39,9 @@ inline int_type rand() {
 typedef uint64_t uuid_type;
 
 inline uuid_type uuid() {
-    static thread_local size_t tid = std::hash<std::thread::id>{}(std::this_thread::get_id());
-    uuid_type rnd = rand::rand();
-    rnd <<= sizeof(rand::int_type) * CHAR_BIT;
-    rnd |= rand::rand();
-    return rnd ^ static_cast<uint64_t>(tid);
+    static const thread_local uint8_t tid = cds::threading::Manager::thread_data()->m_nAttachCount;
+    static thread_local  uint32_t counter = 0;
+    return (static_cast<uuid_type>(counter++) << (sizeof(tid) * CHAR_BIT)) | tid;
 }
 
 } //namespace cds
