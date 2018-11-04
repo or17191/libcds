@@ -25,13 +25,21 @@ namespace cds {
         class htm_status {
         public:
           using int_type = decltype(_xbegin());
-          explicit htm_status(int_type s): m_status(s) {}
+          explicit htm_status(int_type s = 0): m_status(s) {}
+
+          int_type status() const { return m_status; }
 
           bool started() const { return m_status == _XBEGIN_STARTED; }
           explicit operator bool() const { return started(); }
 
-          bool explicit_() const { return m_status & _XABORT_EXPLICIT != 0; }
+          bool explicit_() const { return (m_status & _XABORT_EXPLICIT) != 0; }
           uint8_t explicit_code() const { return static_cast<uint8_t>(_XABORT_CODE(m_status)); }
+
+          bool retry   () const { return (m_status & _XABORT_RETRY) != 0; }
+          bool conflict() const { return (m_status & _XABORT_CONFLICT) != 0; }
+          bool capacity() const { return (m_status & _XABORT_CAPACITY) != 0; }
+          bool debug   () const { return (m_status & _XABORT_DEBUG) != 0; }
+          bool nested  () const { return (m_status & _XABORT_NESTED) != 0; }
 
         private:
           int_type m_status;
@@ -43,14 +51,14 @@ namespace cds {
         */
         template <class Transaction, class Fallback>
         htm_status htm(Transaction &&transaction, Fallback &&fallback) {
-            htm_status status(_xbegin());
-            if (status) {
+            auto raw = _xbegin();
+            if (raw == _XBEGIN_STARTED) {
                 transaction();
                 _xend();
             } else {
                 fallback();
             }
-            return status;
+            return htm_status(raw);
         }
 
         template <class Transaction>
