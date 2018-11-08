@@ -289,6 +289,10 @@ namespace {
             auto node_ptr = Queue::node_traits::to_node_ptr(*first);
             baskets[node_ptr->m_basket_id]++;
           }
+          {
+            auto count = baskets.erase(0);
+            EXPECT_EQ(0, count);
+          }
           std::map<size_t, size_t> distribution;
           for(const auto& basket: baskets) {
             distribution[basket.second]++;

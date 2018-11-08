@@ -678,8 +678,8 @@ namespace cds { namespace intrusive {
                     pNext = gNext.protect( t->m_pNext, []( marked_ptr p ) -> value_type * { return node_traits::to_value_ptr( p.ptr());});
 
                     // add to the basket
-                    if ( m_pTail.load( memory_model::memory_order_relaxed ) == t
-                         && t->m_pNext.load( memory_model::memory_order_relaxed) == pNext
+                    //if ( m_pTail.load( memory_model::memory_order_relaxed ) == t &&
+                    if ( t->m_pNext.load( memory_model::memory_order_relaxed) == pNext
                          && !pNext.bits())
                     {
                         bkoff();
