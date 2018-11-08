@@ -119,6 +119,7 @@ namespace {
           for(const auto& basket: baskets) {
             distribution[basket.second]++;
           }
+          EXPECT_GE(s_nThreadCount, distribution.rbegin()->first) << " allow at most one element per thread in each basket";
           std::stringstream s;
           for(const auto& cell: distribution) {
             s << '(' << cell.first << ',' << cell.second << ')';
