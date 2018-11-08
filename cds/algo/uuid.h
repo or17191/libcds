@@ -39,9 +39,9 @@ inline int_type rand() {
 typedef uint64_t uuid_type;
 
 inline uuid_type uuid() {
-    static const thread_local uint8_t tid = cds::threading::Manager::thread_data()->m_nAttachCount;
-    static thread_local  uint32_t counter = 0;
-    return (static_cast<uuid_type>(counter++) << (sizeof(tid) * CHAR_BIT)) | tid;
+    static thread_local uuid_type counter = cds::threading::Manager::thread_data()->m_nThreadId;
+    counter += (1 << CHAR_BIT); // Make 0 an illegal value
+    return counter;
 }
 
 } //namespace cds

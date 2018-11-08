@@ -115,6 +115,7 @@ namespace cds {
 
             //@endcond
 
+            size_t  m_nThreadId;
             size_t  m_nFakeProcessorNumber  ;   ///< fake "current processor" number
 
             //@cond
@@ -137,7 +138,8 @@ namespace cds {
 #ifdef CDS_URCU_SIGNAL_HANDLING_ENABLED
                 , m_pSHBRCU( nullptr )
 #endif
-                , m_nFakeProcessorNumber( s_nLastUsedProcNo.fetch_add(1, atomics::memory_order_relaxed) % s_nProcCount )
+                , m_nThreadId (s_nLastUsedProcNo.fetch_add(1, atomics::memory_order_relaxed))
+                , m_nFakeProcessorNumber(m_nThreadId  % s_nProcCount )
                 , m_nAttachCount(0)
             {}
 

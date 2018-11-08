@@ -42,7 +42,7 @@ namespace cds { namespace intrusive {
             atomic_marked_ptr m_pNext ; ///< pointer to the next node in the container
             uuid_type m_basket_id;
 
-            node() : m_basket_id(uuid())
+            node() : m_basket_id(0)
             {
                 m_pNext.store( marked_ptr(), atomics::memory_order_release );
             }
@@ -648,6 +648,7 @@ namespace cds { namespace intrusive {
         bool enqueue( value_type& val )
         {
             node_type * pNew = node_traits::to_node_ptr( val );
+            pNew->m_basket_id = uuid();
             link_checker::is_empty( pNew );
 
             typename gc::Guard guard;
