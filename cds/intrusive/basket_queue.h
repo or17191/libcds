@@ -648,7 +648,7 @@ namespace cds { namespace intrusive {
         bool enqueue( value_type& val )
         {
             node_type * pNew = node_traits::to_node_ptr( val );
-            pNew->m_basket_id = uuid();
+            auto my_uuid = uuid();
             link_checker::is_empty( pNew );
 
             typename gc::Guard guard;
@@ -657,6 +657,7 @@ namespace cds { namespace intrusive {
 
             marked_ptr t;
             while ( true ) {
+                pNew->m_basket_id = my_uuid;
                 t = guard.protect( m_pTail, []( marked_ptr p ) -> value_type * { return node_traits::to_value_ptr( p.ptr());});
 
                 marked_ptr pNext = t->m_pNext.load(memory_model::memory_order_relaxed );
@@ -683,11 +684,8 @@ namespace cds { namespace intrusive {
                     {
                         bkoff();
                         pNew->m_pNext.store( pNext, memory_model::memory_order_relaxed );
-                        pNew->m_basket_id = (pNext != nullptr) ? pNext->m_basket_id : uuid();
+                        pNew->m_basket_id = pNext->m_basket_id;
                         if ( t->m_pNext.compare_exchange_weak( pNext, marked_ptr( pNew ), memory_model::memory_order_release, atomics::memory_order_relaxed )) {
-                            if (pNext == nullptr) {
-                              m_Stat.onNullBasket();
-                            }
                             m_Stat.onAddBasket();
                             break;
                         }
