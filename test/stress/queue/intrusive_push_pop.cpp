@@ -286,7 +286,7 @@ namespace {
 
         template <class Queue, class It>
         void check_baskets(It first, It last, std::true_type) {
-          auto checker = cds_test::BasketsChecker::make<Queue>(first, last);
+          auto checker = cds_test::BasketsChecker::make(first, last, [](typename Queue::value_type& n) {return Queue::node_traits::to_node_ptr(std::forward<decltype(n)>(n)); });
           EXPECT_EQ(0, checker.null_basket_count);
           EXPECT_GE(s_nWriterThreadCount, checker.distribution.rbegin()->first) << " allow at most one element per thread in each basket";
           propout() << std::make_pair("basket_distribution", checker.distribution_str());
