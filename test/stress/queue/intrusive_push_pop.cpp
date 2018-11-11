@@ -8,6 +8,8 @@
 #include <algorithm>
 #include <unordered_map>
 
+#include <cds_test/check_baskets.h>
+
 // Multi-threaded random queue test
 namespace {
 
@@ -284,25 +286,13 @@ namespace {
 
         template <class Queue, class It>
         void check_baskets(It first, It last, std::true_type) {
-          std::unordered_map<cds::uuid_type, size_t> baskets;
-          for(; first != last; ++first) {
-            auto node_ptr = Queue::node_traits::to_node_ptr(*first);
-            baskets[node_ptr->m_basket_id]++;
-          }
-          {
-            auto count = baskets.erase(0);
-            EXPECT_EQ(0, count);
-          }
-          std::map<size_t, size_t> distribution;
-          for(const auto& basket: baskets) {
-            distribution[basket.second]++;
-          }
-          EXPECT_GE(s_nWriterThreadCount, distribution.rbegin()->first) << " allow at most one element per thread in each basket";
-          std::stringstream s;
-          for(const auto& cell: distribution) {
-            s << '(' << cell.first << ',' << cell.second << ')';
-          }
-          propout() << std::make_pair("basket_distribution", s.str());
+          auto checker = cds_test::BasketsChecker::make<Queue>(first, last);
+          EXPECT_EQ(0, checker.null_basket_count);
+          EXPECT_GE(s_nWriterThreadCount, checker.distribution.rbegin()->first) << " allow at most one element per thread in each basket";
+          propout() << std::make_pair("basket_distribution", checker.distribution_str());
+          auto mean_std = checker.mean_std();
+          propout() << std::make_pair("basket_mean", mean_std.first);
+          propout() << std::make_pair("basket_std", mean_std.second);
         }
 
         template <class Queue, class It>
