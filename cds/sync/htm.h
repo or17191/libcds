@@ -122,8 +122,8 @@ namespace cds {
             // Fast fail if don't have htm support
             std::terminate();
         }
-        template <class... Args>
-        void abort(Args &&...) {
+        template <uint8_t>
+        void abort() {
             std::terminate();
         }
     } // namespace sync
