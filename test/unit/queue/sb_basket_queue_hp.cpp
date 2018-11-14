@@ -7,6 +7,7 @@
 #include <cds_test/check_size.h>
 
 #include <cds/gc/hp.h>
+#include <cds/algo/uuid.h>
 #include <cds/container/sb_basket_queue.h>
 
 namespace {
@@ -25,13 +26,15 @@ namespace {
 
             const size_t nSize = 100;
 
+            cds::uuid_type basket;
+
             ASSERT_TRUE( q.empty());
             ASSERT_CONTAINER_SIZE( q, 0 );
 
             // enqueue/dequeue
             for ( size_t i = 0; i < nSize; ++i ) {
                 it = static_cast<value_type>(i);
-                ASSERT_TRUE( q.enqueue( it ));
+                ASSERT_TRUE( q.enqueue( it, 0 ));
                 ASSERT_CONTAINER_SIZE( q, i + 1 );
             }
             ASSERT_FALSE( q.empty());
@@ -39,7 +42,7 @@ namespace {
 
             for ( size_t i = 0; i < nSize; ++i ) {
                 it = -1;
-                ASSERT_TRUE( q.dequeue( it ));
+                ASSERT_TRUE( q.dequeue( it, &basket ));
                 ASSERT_EQ( it, static_cast<value_type>( i ));
                 ASSERT_CONTAINER_SIZE( q, nSize - i - 1 );
             }
@@ -49,7 +52,7 @@ namespace {
             // push/pop
             for ( size_t i = 0; i < nSize; ++i ) {
                 it = static_cast<value_type>(i);
-                ASSERT_TRUE( q.push( it ));
+                ASSERT_TRUE( q.push( it, 0 ));
                 ASSERT_CONTAINER_SIZE( q, i + 1 );
             }
             ASSERT_FALSE( q.empty());
@@ -57,7 +60,7 @@ namespace {
 
             for ( size_t i = 0; i < nSize; ++i ) {
                 it = -1;
-                ASSERT_TRUE( q.pop( it ));
+                ASSERT_TRUE( q.pop( it , &basket));
                 ASSERT_EQ( it, static_cast<value_type>( i ));
                 ASSERT_CONTAINER_SIZE( q, nSize - i - 1 );
             }
@@ -66,7 +69,7 @@ namespace {
 
             // clear
             for ( size_t i = 0; i < nSize; ++i ) {
-                ASSERT_TRUE( q.push( static_cast<value_type>(i)));
+                ASSERT_TRUE( q.push( static_cast<value_type>(i), 0));
             }
             ASSERT_FALSE( q.empty());
             ASSERT_CONTAINER_SIZE( q, nSize );
@@ -98,7 +101,7 @@ namespace {
             const size_t nSize = sizeof( str ) / sizeof( str[0] );
 
             for ( size_t i = 0; i < nSize; ++i ) {
-                ASSERT_TRUE( q.push( str[i].c_str()));
+                ASSERT_TRUE( q.push( str[i].c_str(), 0));
                 ASSERT_CONTAINER_SIZE( q, i + 1 );
             }
             ASSERT_FALSE( q.empty());
@@ -125,9 +128,9 @@ namespace {
                 std::string s = str[i];
                 ASSERT_FALSE( s.empty());
                 if ( i & 1 )
-                    ASSERT_TRUE( q.enqueue( std::move( s )));
+                    ASSERT_TRUE( q.enqueue( std::move( s ), 0));
                 else
-                    ASSERT_TRUE( q.push( std::move( s )));
+                    ASSERT_TRUE( q.push( std::move( s ), 0));
                 ASSERT_TRUE( s.empty());
                 ASSERT_CONTAINER_SIZE( q, i + 1 );
             }

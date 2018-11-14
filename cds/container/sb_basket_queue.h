@@ -172,10 +172,10 @@ namespace cds { namespace container {
             and then it calls \p intrusive::BasketQueue::enqueue().
             Returns \p true if success, \p false otherwise.
         */
-        bool enqueue(value_type const &val)
+        bool enqueue(value_type const &val, size_t id)
         {
             scoped_node_ptr p(alloc_node(val));
-            if (do_enqueue(*p)) {
+            if (do_enqueue(*p, id)) {
                 p.release();
                 return true;
             }
@@ -183,27 +183,22 @@ namespace cds { namespace container {
         }
 
         /// Enqueues \p val value into the queue, move semantics
-        bool enqueue(value_type &&val)
+        bool enqueue(value_type &&val, size_t id)
         {
             scoped_node_ptr p(alloc_node_move(std::move(val)));
-            if (do_enqueue(*p)) {
+            if (do_enqueue(*p, id)) {
                 p.release();
                 return true;
             }
             return false;
         }
 
-        /// Synonym for \p enqueue() function
-        bool push(value_type const &val)
+        template <class... Args>
+        bool push(Args&&... args)
         {
-            return enqueue(val);
+            return enqueue(std::forward<Args>(args)...);
         }
 
-        /// Synonym for \p enqueue() function, move semantics
-        bool push(value_type &&val)
-        {
-            return enqueue(std::move(val));
-        }
 
         /// Dequeues a value from the queue
         /**
@@ -263,7 +258,7 @@ namespace cds { namespace container {
         }
 
     private:
-        bool do_enqueue(node_type &val)
+        bool do_enqueue(node_type &val, size_t /*id*/)
         {
             base_node_type *pNew = node_traits::to_node_ptr(val);
             auto my_uuid = uuid();
