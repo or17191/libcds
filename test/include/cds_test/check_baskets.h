@@ -25,8 +25,8 @@ struct BasketsChecker {
     BasketsChecker checker;
     std::unordered_map<cds::uuid_type, size_t> baskets;
     for(; first != last; ++first) {
-      auto node_ptr = extractor(*first);
-      baskets[node_ptr->m_basket_id]++;
+      auto basket_id = extractor(*first);
+      baskets[basket_id]++;
     }
     {
       auto it = baskets.find(0);
