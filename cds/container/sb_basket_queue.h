@@ -104,12 +104,14 @@ namespace cds { namespace container {
         char pad1_[cds::c_nCacheLineSize - sizeof(m_bag)];
         atomics::atomic_int m_counter;
         char pad2_[cds::c_nCacheLineSize - sizeof(m_counter)];
+        size_t m_size;
 
     public:
-        SimpleBag(size_t ids) : m_bag(new PaddedT[ids]()), m_counter(0) {}
+        SimpleBag(size_t ids) : m_bag(new PaddedT[ids]()), m_counter(0), m_size(ids) {}
         bool insert(T &t, size_t /*id*/)
         {
             auto idx = m_counter.fetch_add(1, atomics::memory_order_relaxed);
+            assert(idx < m_size);
             std::swap(t, m_bag[idx].value);
             return true;
         }
@@ -259,7 +261,9 @@ namespace cds { namespace container {
         {
             scoped_node_ptr p(alloc_node());
             if (do_enqueue(*p, std::forward<Arg>(val), id)) {
-                p.release();
+                if(node_traits::to_node_ptr(*p)->m_basket_id != 0) {
+                  p.release();
+                }
                 return true;
             }
             return false;
@@ -343,8 +347,10 @@ namespace cds { namespace container {
 
             marked_ptr t;
             while (true) {
-                pNew->m_basket_id = my_uuid;
-                node.insert(val, id);
+                if (pNew->m_basket_id == 0) {
+                  pNew->m_basket_id = my_uuid;
+                  node.insert(val, id);
+                }
                 t = guard.protect(m_pTail, [](marked_ptr p) -> node_type * { return node_traits::to_value_ptr(p.ptr()); });
 
                 marked_ptr pNext = t->m_pNext.load(memory_model::memory_order_relaxed);
@@ -359,8 +365,11 @@ namespace cds { namespace container {
 
                     // Try adding to basket
                     m_Stat.onTryAddBasket();
-
-                    node.extract(val, id);
+                    
+                    if (pNew->m_basket_id != 0) {
+                      pNew->m_basket_id = 0;
+                      node.extract(val, id);
+                    }
 
                     // Reread tail next
                 try_again:
