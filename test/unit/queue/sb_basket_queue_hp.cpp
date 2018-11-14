@@ -146,9 +146,13 @@ namespace {
             ASSERT_TRUE( q.empty());
             ASSERT_CONTAINER_SIZE( q, 0 );
         }
+
+        template <class T>
+        using bag_t = cds::container::SimpleBag<T>;
+
         void SetUp()
         {
-            typedef cc::SBBasketQueue< gc_type, int > queue_type;
+            typedef cc::SBBasketQueue< gc_type, int , bag_t> queue_type;
 
             cds::gc::hp::GarbageCollector::Construct( queue_type::c_nHazardPtrCount, 1, 16 );
             cds::threading::Manager::attachThread();
@@ -161,49 +165,50 @@ namespace {
         }
     };
 
+
     TEST_F( SBBasketQueue_HP, defaulted )
     {
-        typedef cds::container::SBBasketQueue< gc_type, int > test_queue;
+        typedef cds::container::SBBasketQueue< gc_type, int, bag_t> test_queue;
 
-        test_queue q;
+        test_queue q(1);
         test(q);
     }
 
     TEST_F( SBBasketQueue_HP, item_counting )
     {
-        typedef cds::container::SBBasketQueue < gc_type, int,
+        typedef cds::container::SBBasketQueue < gc_type, int, bag_t,
             typename cds::container::basket_queue::make_traits <
                 cds::opt::item_counter < cds::atomicity::item_counter >
             > ::type
         > test_queue;
 
-        test_queue q;
+        test_queue q(1);
         test( q );
     }
 
     TEST_F( SBBasketQueue_HP, relaxed )
     {
-        typedef cds::container::SBBasketQueue < gc_type, int,
+        typedef cds::container::SBBasketQueue < gc_type, int, bag_t,
             typename cds::container::basket_queue::make_traits <
                 cds::opt::item_counter< cds::atomicity::item_counter >
                 , cds::opt::memory_model < cds::opt::v::relaxed_ordering >
             > ::type
         > test_queue;
 
-        test_queue q;
+        test_queue q(1);
         test( q );
     }
 
     TEST_F( SBBasketQueue_HP, aligned )
     {
-        typedef cds::container::SBBasketQueue < gc_type, int,
+        typedef cds::container::SBBasketQueue < gc_type, int, bag_t,
             typename cds::container::basket_queue::make_traits <
                 cds::opt::memory_model< cds::opt::v::relaxed_ordering>
                 , cds::opt::padding < 32 >
             >::type
         > test_queue;
 
-        test_queue q;
+        test_queue q(1);
         test( q );
     }
 
@@ -215,17 +220,17 @@ namespace {
             typedef cds::atomicity::item_counter item_counter;
             enum { padding = 64 };
         };
-        typedef cds::container::SBBasketQueue < gc_type, int, traits > test_queue;
+        typedef cds::container::SBBasketQueue < gc_type, int, bag_t, traits > test_queue;
 
-        test_queue q;
+        test_queue q(1);
         test( q );
     }
 
     TEST_F( SBBasketQueue_HP, move )
     {
-        typedef cds::container::SBBasketQueue< gc_type, std::string > test_queue;
+        typedef cds::container::SBBasketQueue< gc_type, std::string, bag_t> test_queue;
 
-        test_queue q;
+        test_queue q(1);
         test_string( q );
     }
 
@@ -235,9 +240,9 @@ namespace {
         {
             typedef cds::atomicity::item_counter item_counter;
         };
-        typedef cds::container::SBBasketQueue< gc_type, std::string, traits > test_queue;
+        typedef cds::container::SBBasketQueue< gc_type, std::string, bag_t, traits > test_queue;
 
-        test_queue q;
+        test_queue q(1);
         test_string( q );
     }
 

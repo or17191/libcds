@@ -36,27 +36,116 @@ namespace cds { namespace container {
 
     //@cond
     namespace details {
-        template <typename GC, typename T, typename Traits>
-        struct make_sb_basket_queue : cds::container::details::make_basket_queue<GC, T, Traits>
+        template <typename GC, typename Bag, typename Traits>
+        struct make_sb_basket_queue
         {
+            typedef GC gc;
+            typedef Bag bag_type;
+            typedef Traits traits;
+
+            struct node_type : public intrusive::basket_queue::node<gc>
+            {
+                bag_type m_bag;
+
+                node_type(size_t size)
+                    : m_bag(size)
+                {
+                }
+
+                template <class... Args>
+                bool extract(Args &&... args)
+                {
+                    return m_bag.extract(std::forward<Args>(args)...);
+                }
+
+                template <class... Args>
+                bool insert(Args &&... args)
+                {
+                    return m_bag.insert(std::forward<Args>(args)...);
+                }
+
+                bool empty() const { return m_bag.empty(); }
+            };
+
+            typedef typename std::allocator_traits<typename traits::allocator>::template rebind_alloc<node_type> allocator_type;
+            //typedef typename traits::allocator::template rebind<node_type>::other allocator_type;
+            typedef cds::details::Allocator<node_type, allocator_type> cxx_allocator;
+
+            struct node_deallocator
+            {
+                void operator()(node_type *pNode)
+                {
+                    cxx_allocator().Delete(pNode);
+                }
+            };
+
+            struct intrusive_traits : public traits
+            {
+                typedef cds::intrusive::basket_queue::base_hook<opt::gc<gc>> hook;
+                typedef node_deallocator disposer;
+                static constexpr const cds::intrusive::opt::link_check_type link_checker = cds::intrusive::basket_queue::traits::link_checker;
+            };
+
+            typedef cds::intrusive::BasketQueue<gc, node_type, intrusive_traits> type;
         };
     } // namespace details
     //@endcond
 
-    template <typename GC, typename T, typename Traits = basket_queue::traits>
+    template <class T>
+    class SimpleBag
+    {
+    private:
+        struct PaddedT
+        {
+            T value;
+            char pad1_[cds::c_nCacheLineSize - sizeof(value)];
+        };
+        std::unique_ptr<PaddedT[]> m_bag;
+        char pad1_[cds::c_nCacheLineSize - sizeof(m_bag)];
+        atomics::atomic_int m_counter;
+        char pad2_[cds::c_nCacheLineSize - sizeof(m_counter)];
+
+    public:
+        SimpleBag(size_t ids) : m_bag(new PaddedT[ids]()), m_counter(0) {}
+        bool insert(T &t, size_t /*id*/)
+        {
+            auto idx = m_counter.fetch_add(1, atomics::memory_order_relaxed);
+            std::swap(t, m_bag[idx].value);
+            return true;
+        }
+        bool extract(T &t)
+        {
+            auto idx = m_counter.fetch_sub(1, atomics::memory_order_relaxed) - 1;
+            if (idx < 0) {
+                // Yes, there is a race here.
+                return false;
+            }
+            std::swap(t, m_bag[idx].value);
+            return true;
+        }
+
+        bool extract(T &t, size_t /*id*/)
+        {
+            return extract(t);
+        }
+
+        bool empty() const { return m_counter.load(atomics::memory_order_acquire) <= 0; }
+    };
+
+    template <typename GC, typename T, template <class> class Bag, typename Traits = basket_queue::traits>
     class SBBasketQueue
     {
         //@cond
-        typedef details::make_sb_basket_queue<GC, T, Traits> maker;
+        typedef details::make_sb_basket_queue<GC, Bag<T>, Traits> maker;
         typedef typename maker::type base_class;
         //@endcond
 
     public:
         /// Rebind template arguments
-        template <typename GC2, typename T2, typename Traits2>
+        template <typename GC2, typename T2, template <class> class Bag2, typename Traits2>
         struct rebind
         {
-            typedef SBBasketQueue<GC2, T2, Traits2> other; ///< Rebinding result
+            typedef SBBasketQueue<GC2, T2, Bag2, Traits2> other; ///< Rebinding result
         };
 
     public:
@@ -89,7 +178,8 @@ namespace cds { namespace container {
         struct dequeue_result
         {
             typename gc::template GuardArray<3> guards;
-            base_node_type *pNext;
+            value_type value;
+            uuid_type basket_id;
         };
         //@cond
         atomic_marked_ptr m_pHead; ///< Queue's head pointer (aligned)
@@ -101,22 +191,14 @@ namespace cds { namespace container {
         item_counter m_ItemCounter; ///< Item counter
         stat m_Stat;                ///< Internal statistics
         size_t const m_nMaxHops;
+        size_t const m_ids;
         //@endcond
 
     protected:
         ///@cond
-        static node_type *alloc_node()
+        node_type *alloc_node()
         {
-            return cxx_allocator().New();
-        }
-        static node_type *alloc_node(const value_type &val)
-        {
-            return cxx_allocator().New(val);
-        }
-        template <typename... Args>
-        static node_type *alloc_node_move(Args &&... args)
-        {
-            return cxx_allocator().MoveNew(std::forward<Args>(args)...);
+            return cxx_allocator().New(m_ids);
         }
         static void free_node(node_type *p)
         {
@@ -135,8 +217,8 @@ namespace cds { namespace container {
 
     public:
         /// Initializes empty queue
-        SBBasketQueue()
-            : m_pHead(&m_Dummy), m_pTail(&m_Dummy), m_nMaxHops(3)
+        SBBasketQueue(size_t ids)
+            : m_Dummy(0), m_pHead(&m_Dummy), m_pTail(&m_Dummy), m_nMaxHops(3), m_ids(ids)
         {
         }
 
@@ -172,21 +254,11 @@ namespace cds { namespace container {
             and then it calls \p intrusive::BasketQueue::enqueue().
             Returns \p true if success, \p false otherwise.
         */
-        bool enqueue(value_type const &val, size_t id)
+        template <class Arg>
+        bool enqueue(Arg &&val, size_t id)
         {
-            scoped_node_ptr p(alloc_node(val));
-            if (do_enqueue(*p, id)) {
-                p.release();
-                return true;
-            }
-            return false;
-        }
-
-        /// Enqueues \p val value into the queue, move semantics
-        bool enqueue(value_type &&val, size_t id)
-        {
-            scoped_node_ptr p(alloc_node_move(std::move(val)));
-            if (do_enqueue(*p, id)) {
+            scoped_node_ptr p(alloc_node());
+            if (do_enqueue(*p, std::forward<Arg>(val), id)) {
                 p.release();
                 return true;
             }
@@ -194,11 +266,10 @@ namespace cds { namespace container {
         }
 
         template <class... Args>
-        bool push(Args&&... args)
+        bool push(Args &&... args)
         {
             return enqueue(std::forward<Args>(args)...);
         }
-
 
         /// Dequeues a value from the queue
         /**
@@ -206,7 +277,7 @@ namespace cds { namespace container {
             dequeued value. The assignment operator for \p value_type is invoked.
             If queue is empty, the function returns \p false, \p dest is unchanged.
         */
-        bool dequeue(value_type &dest, uuid_type* basket_id = nullptr)
+        bool dequeue(value_type &dest, uuid_type *basket_id = nullptr)
         {
 
             dequeue_result res;
@@ -214,9 +285,9 @@ namespace cds { namespace container {
                 // TSan finds a race between this read of \p src and node_type constructor
                 // I think, it is wrong
                 CDS_TSAN_ANNOTATE_IGNORE_READS_BEGIN;
-                dest = std::move(node_traits::to_value_ptr(*res.pNext)->m_value);
+                dest = std::move(res.value);
                 if (basket_id != nullptr) {
-                  *basket_id = res.pNext->m_basket_id;
+                    *basket_id = res.basket_id;
                 }
                 CDS_TSAN_ANNOTATE_IGNORE_READS_END;
                 return true;
@@ -226,7 +297,7 @@ namespace cds { namespace container {
 
         /// Synonym for \p dequeue() function
         template <class... Args>
-        bool pop(Args&&... args)
+        bool pop(Args &&... args)
         {
             return dequeue(std::forward<Args>(args)...);
         }
@@ -258,9 +329,11 @@ namespace cds { namespace container {
         }
 
     private:
-        bool do_enqueue(node_type &val, size_t /*id*/)
+        template <class Arg>
+        bool do_enqueue(node_type &node, Arg &&tmp_val, size_t id)
         {
-            base_node_type *pNew = node_traits::to_node_ptr(val);
+            value_type val(std::forward<Arg>(tmp_val));
+            base_node_type *pNew = node_traits::to_node_ptr(node);
             auto my_uuid = uuid();
             link_checker::is_empty(pNew);
 
@@ -271,6 +344,7 @@ namespace cds { namespace container {
             marked_ptr t;
             while (true) {
                 pNew->m_basket_id = my_uuid;
+                node.insert(val, id);
                 t = guard.protect(m_pTail, [](marked_ptr p) -> node_type * { return node_traits::to_value_ptr(p.ptr()); });
 
                 marked_ptr pNext = t->m_pNext.load(memory_model::memory_order_relaxed);
@@ -286,6 +360,8 @@ namespace cds { namespace container {
                     // Try adding to basket
                     m_Stat.onTryAddBasket();
 
+                    node.extract(val, id);
+
                     // Reread tail next
                 try_again:
                     pNext = gNext.protect(t->m_pNext, [](marked_ptr p) -> node_type * { return node_traits::to_value_ptr(p.ptr()); });
@@ -294,9 +370,7 @@ namespace cds { namespace container {
                     //if ( m_pTail.load( memory_model::memory_order_relaxed ) == t &&
                     if (t->m_pNext.load(memory_model::memory_order_relaxed) == pNext && !pNext.bits()) {
                         bkoff();
-                        pNew->m_pNext.store(pNext, memory_model::memory_order_relaxed);
-                        pNew->m_basket_id = pNext->m_basket_id;
-                        if (t->m_pNext.compare_exchange_weak(pNext, marked_ptr(pNew), memory_model::memory_order_release, atomics::memory_order_relaxed)) {
+                        if (node.insert(val, id)) {
                             m_Stat.onAddBasket();
                             break;
                         }
@@ -425,16 +499,29 @@ namespace cds { namespace container {
 
                         if (iter.ptr() == t.ptr())
                             free_chain(h, iter);
-                        else if (bDeque) {
-                            res.pNext = pNext.ptr();
-
-                            if (iter->m_pNext.compare_exchange_weak(pNext, marked_ptr(pNext.ptr(), 1), memory_model::memory_order_acquire, atomics::memory_order_relaxed)) {
+                        else {
+                            auto value_node = node_traits::to_value_ptr(*pNext.ptr());
+                            auto mark_deleted = [&] {
+                                iter->m_pNext.compare_exchange_weak(pNext, marked_ptr(pNext.ptr(), 1), memory_model::memory_order_acquire, atomics::memory_order_relaxed);
                                 if (hops >= m_nMaxHops)
                                     free_chain(h, pNext);
-                                break;
+                            };
+                            if (bDeque) {
+                                if (value_node->extract(res.value)) {
+                                    res.basket_id = pNext->m_basket_id;
+                                    if (value_node->empty()) {
+                                        mark_deleted();
+                                    }
+                                    break;
+                                } else {
+                                    // empty node, mark it as deleted.
+                                    mark_deleted();
+                                }
+                            } else {
+                                // Not sure how thread safe that is
+                                return !value_node->empty();
                             }
-                        } else
-                            return true;
+                        }
                     }
                 }
 
