@@ -20,12 +20,12 @@ struct BasketsChecker {
   size_t null_basket_count;
   std::map<size_t, size_t> distribution;
 
-  template <class Queue, class It>
-  static BasketsChecker make(It first, It last) {
+  template <class It, class F>
+  static BasketsChecker make(It first, It last, F&& extractor) {
     BasketsChecker checker;
     std::unordered_map<cds::uuid_type, size_t> baskets;
     for(; first != last; ++first) {
-      auto node_ptr = Queue::node_traits::to_node_ptr(*first);
+      auto node_ptr = extractor(*first);
       baskets[node_ptr->m_basket_id]++;
     }
     {
