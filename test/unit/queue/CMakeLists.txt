@@ -30,6 +30,7 @@ set(CDSGTEST_QUEUE_SOURCES
     intrusive_segmented_queue_hp.cpp
     intrusive_segmented_queue_dhp.cpp
     intrusive_vyukov_queue.cpp
+    sb_basket_queue_hp.cpp
 )
 
 include_directories(
