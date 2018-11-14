@@ -22,14 +22,6 @@ namespace {
 
     struct empty {};
 
-    template <typename Base = empty >
-    struct value_type: public Base
-    {
-        size_t      nNo;
-        size_t      nWriterNo;
-        size_t      nPopNo;
-    };
-
     class intrusive_queue_push : public cds_test::stress_fixture
     {
         typedef cds_test::stress_fixture base_class;
@@ -60,10 +52,11 @@ namespace {
 
             virtual void test()
             {
+                using value_type = typename Queue::value_type;
                 size_t i = 0;
                 const auto id_ = id();
                 while ( i < m_count ) {
-                    if ( m_Queue.push({id_, i}, id_)) {
+                    if ( m_Queue.push(value_type{id_, i}, id_)) {
                         ++i;
                     }
                     else
@@ -127,14 +120,21 @@ namespace {
 
             propout() << std::make_pair( "duration", duration );
 
-            using value_type = std::pair<size_t, size_t>;
-            std::vector<value_type> values;
-            values.reserve(s_nQueueSize + 1);
+            struct record {
+              size_t writer_id;
+              size_t number;
+              cds::uuid_type basket_id;
+            };
+
+            std::vector<record> values;
+            values.reserve(s_nQueueSize);
             values.emplace_back();
             int pops = 0;
-            while(q.pop(values.back())) {
+            std::pair<size_t, size_t> value;
+            cds::uuid_type basket;
+            while(q.pop(value, &basket)) {
               ++pops;
-              values.emplace_back();
+              values.emplace_back(record{value.first, value.second, basket});
             }
             values.pop_back();
             EXPECT_EQ(s_nQueueSize, pops);
@@ -143,7 +143,7 @@ namespace {
             analyze( q, values.begin(), values.end());
 
             propout() << q.statistics();
-            check_baskets<Queue>(values.begin(), values.end());
+            check_baskets(values.begin(), values.end());
         }
 
         template <class Queue, class It>
@@ -166,8 +166,8 @@ namespace {
             for(auto it = pValStart; it != pValEnd; ++it) {
               ASSERT_LT(it->writer_id, s_nThreadCount);
               auto& last_item = latest[it->writer_id];
-              EXPECT_EQ(last_item + 1, it->value);
-              last_item = it->value;
+              EXPECT_EQ(last_item + 1, it->number);
+              last_item = it->number;
             }
 
         }
@@ -181,7 +181,7 @@ namespace {
         QueueType::gc::force_dispose(); \
     }
 
-    using SBBasketQueue_HP = cds::container::SBBasketQueue<cds::gc::HP, std::pair<size_t, size_t>, cds::container::simple_bag>;
+    using SBBasketQueue_HP = cds::container::SBBasketQueue<cds::gc::HP, std::pair<size_t, size_t>, cds::container::SimpleBag>;
 
     CDSSTRESS_QUEUE_F( SBBasketQueue_HP)
 
