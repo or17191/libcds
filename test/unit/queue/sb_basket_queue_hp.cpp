@@ -3,7 +3,8 @@
 // Distributed under the Boost Software License, Version 1.0. (See accompanying
 // file LICENSE or copy at http://www.boost.org/LICENSE_1_0.txt)
 
-#include "test_generic_queue.h"
+
+#include <cds_test/check_size.h>
 
 #include <cds/gc/hp.h>
 #include <cds/container/sb_basket_queue.h>
@@ -13,9 +14,136 @@ namespace {
     typedef cds::gc::HP gc_type;
 
 
-    class SBBasketQueue_HP : public cds_test::generic_queue
+    class SBBasketQueue_HP : public ::testing::Test
     {
     protected:
+        template <typename Queue>
+        void test( Queue& q )
+        {
+            typedef typename Queue::value_type value_type;
+            value_type it;
+
+            const size_t nSize = 100;
+
+            ASSERT_TRUE( q.empty());
+            ASSERT_CONTAINER_SIZE( q, 0 );
+
+            // enqueue/dequeue
+            for ( size_t i = 0; i < nSize; ++i ) {
+                it = static_cast<value_type>(i);
+                ASSERT_TRUE( q.enqueue( it ));
+                ASSERT_CONTAINER_SIZE( q, i + 1 );
+            }
+            ASSERT_FALSE( q.empty());
+            ASSERT_CONTAINER_SIZE( q, nSize );
+
+            for ( size_t i = 0; i < nSize; ++i ) {
+                it = -1;
+                ASSERT_TRUE( q.dequeue( it ));
+                ASSERT_EQ( it, static_cast<value_type>( i ));
+                ASSERT_CONTAINER_SIZE( q, nSize - i - 1 );
+            }
+            ASSERT_TRUE( q.empty());
+            ASSERT_CONTAINER_SIZE( q, 0 );
+
+            // push/pop
+            for ( size_t i = 0; i < nSize; ++i ) {
+                it = static_cast<value_type>(i);
+                ASSERT_TRUE( q.push( it ));
+                ASSERT_CONTAINER_SIZE( q, i + 1 );
+            }
+            ASSERT_FALSE( q.empty());
+            ASSERT_CONTAINER_SIZE( q, nSize );
+
+            for ( size_t i = 0; i < nSize; ++i ) {
+                it = -1;
+                ASSERT_TRUE( q.pop( it ));
+                ASSERT_EQ( it, static_cast<value_type>( i ));
+                ASSERT_CONTAINER_SIZE( q, nSize - i - 1 );
+            }
+            ASSERT_TRUE( q.empty());
+            ASSERT_CONTAINER_SIZE( q, 0 );
+
+            // clear
+            for ( size_t i = 0; i < nSize; ++i ) {
+                ASSERT_TRUE( q.push( static_cast<value_type>(i)));
+            }
+            ASSERT_FALSE( q.empty());
+            ASSERT_CONTAINER_SIZE( q, nSize );
+
+            q.clear();
+            ASSERT_TRUE( q.empty());
+            ASSERT_CONTAINER_SIZE( q, 0 );
+
+            // pop from empty queue
+            it = nSize * 2;
+            ASSERT_FALSE( q.pop( it ));
+            ASSERT_EQ( it, static_cast<value_type>( nSize * 2 ));
+            ASSERT_TRUE( q.empty());
+            ASSERT_CONTAINER_SIZE( q, 0 );
+
+            ASSERT_FALSE( q.dequeue( it ));
+            ASSERT_EQ( it, static_cast<value_type>( nSize * 2 ));
+            ASSERT_TRUE( q.empty());
+            ASSERT_CONTAINER_SIZE( q, 0 );
+        }
+
+        template <class Queue>
+        void test_string( Queue& q )
+        {
+            std::string str[3];
+            str[0] = "one";
+            str[1] = "two";
+            str[2] = "three";
+            const size_t nSize = sizeof( str ) / sizeof( str[0] );
+
+            // emplace
+            for ( size_t i = 0; i < nSize; ++i ) {
+                ASSERT_TRUE( q.emplace( str[i].c_str()));
+                ASSERT_CONTAINER_SIZE( q, i + 1 );
+            }
+            ASSERT_FALSE( q.empty());
+            ASSERT_CONTAINER_SIZE( q, nSize );
+
+            {
+                std::string s;
+                for ( size_t i = 0; i < nSize; ++i ) {
+                    if ( i & 1 )
+                        ASSERT_TRUE( q.pop( s ));
+                    else
+                        ASSERT_TRUE( q.dequeue( s ));
+
+                    ASSERT_CONTAINER_SIZE( q, nSize - i - 1 );
+                    ASSERT_EQ( s, str[i] );
+                }
+            }
+            ASSERT_TRUE( q.empty());
+            ASSERT_CONTAINER_SIZE( q, 0 );
+
+
+            // move push
+            for ( size_t i = 0; i < nSize; ++i ) {
+                std::string s = str[i];
+                ASSERT_FALSE( s.empty());
+                if ( i & 1 )
+                    ASSERT_TRUE( q.enqueue( std::move( s )));
+                else
+                    ASSERT_TRUE( q.push( std::move( s )));
+                ASSERT_TRUE( s.empty());
+                ASSERT_CONTAINER_SIZE( q, i + 1 );
+            }
+            ASSERT_FALSE( q.empty());
+            ASSERT_CONTAINER_SIZE( q, nSize );
+
+            for ( size_t i = 0; i < nSize; ++i ) {
+                std::string s;
+                ASSERT_TRUE( q.pop( s ));
+                ASSERT_CONTAINER_SIZE( q, nSize - i - 1 );
+                ASSERT_EQ( s, str[i] );
+            }
+            ASSERT_TRUE( q.empty());
+            ASSERT_CONTAINER_SIZE( q, 0 );
+        }
         void SetUp()
         {
             typedef cc::SBBasketQueue< gc_type, int > queue_type;

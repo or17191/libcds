@@ -193,28 +193,6 @@ namespace cds { namespace container {
             return false;
         }
 
-        /// Enqueues \p data to queue using a functor
-        /**
-            \p Func is a functor called to create node.
-            The functor \p f takes one argument - a reference to a new node of type \ref value_type :
-            \code
-            cds::container::BasketQueue< cds::gc::HP, Foo > myQueue;
-            Bar bar;
-            myQueue.enqueue_with( [&bar]( Foo& dest ) { dest = bar; } );
-            \endcode
-        */
-        template <typename Func>
-        bool enqueue_with(Func f)
-        {
-            scoped_node_ptr p(alloc_node());
-            f(p->m_value);
-            if (do_enqueue(*p)) {
-                p.release();
-                return true;
-            }
-            return false;
-        }
-
         /// Synonym for \p enqueue() function
         bool push(value_type const &val)
         {
@@ -225,13 +203,6 @@ namespace cds { namespace container {
         bool push(value_type &&val)
         {
             return enqueue(std::move(val));
-        }
-
-        /// Synonym for \p enqueue_with() function
-        template <typename Func>
-        bool push_with(Func f)
-        {
-            return enqueue_with(f);
         }
 
         /// Enqueues data of type \ref value_type constructed with <tt>std::forward<Args>(args)...</tt>
@@ -254,32 +225,14 @@ namespace cds { namespace container {
         */
         bool dequeue(value_type &dest)
         {
-            return dequeue_with([&dest](value_type &src) {
+
+            dequeue_result res;
+            if (do_dequeue(res, true)) {
                 // TSan finds a race between this read of \p src and node_type constructor
                 // I think, it is wrong
                 CDS_TSAN_ANNOTATE_IGNORE_READS_BEGIN;
-                dest = std::move(src);
+                dest = std::move(node_traits::to_value_ptr(*res.pNext)->m_value);
                 CDS_TSAN_ANNOTATE_IGNORE_READS_END;
-            });
-        }
-
-        /// Dequeues a value using a functor
-        /**
-            \p Func is a functor called to copy dequeued value.
-            The functor takes one argument - a reference to removed node:
-            \code
-            cds:container::BasketQueue< cds::gc::HP, Foo > myQueue;
-            Bar bar;
-            myQueue.dequeue_with( [&bar]( Foo& src ) { bar = std::move( src );});
-            \endcode
-            The functor is called only if the queue is not empty.
-        */
-        template <typename Func>
-        bool dequeue_with(Func f)
-        {
-            dequeue_result res;
-            if (do_dequeue(res, true)) {
-                f(node_traits::to_value_ptr(*res.pNext)->m_value);
                 return true;
             }
             return false;
@@ -289,13 +242,6 @@ namespace cds { namespace container {
         bool pop(value_type &dest)
         {
             return dequeue(dest);
-        }
-
-        /// Synonym for \p dequeue_with() function
-        template <typename Func>
-        bool pop_with(Func f)
-        {
-            return dequeue_with(f);
         }
 
         bool empty()
