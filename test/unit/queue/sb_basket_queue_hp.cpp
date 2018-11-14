@@ -97,9 +97,8 @@ namespace {
             str[2] = "three";
             const size_t nSize = sizeof( str ) / sizeof( str[0] );
 
-            // emplace
             for ( size_t i = 0; i < nSize; ++i ) {
-                ASSERT_TRUE( q.emplace( str[i].c_str()));
+                ASSERT_TRUE( q.push( str[i].c_str()));
                 ASSERT_CONTAINER_SIZE( q, i + 1 );
             }
             ASSERT_FALSE( q.empty());

@@ -205,25 +205,13 @@ namespace cds { namespace container {
             return enqueue(std::move(val));
         }
 
-        /// Enqueues data of type \ref value_type constructed with <tt>std::forward<Args>(args)...</tt>
-        template <typename... Args>
-        bool emplace(Args &&... args)
-        {
-            scoped_node_ptr p(alloc_node_move(std::forward<Args>(args)...));
-            if (do_enqueue(*p)) {
-                p.release();
-                return true;
-            }
-            return false;
-        }
-
         /// Dequeues a value from the queue
         /**
             If queue is not empty, the function returns \p true, \p dest contains copy of
             dequeued value. The assignment operator for \p value_type is invoked.
             If queue is empty, the function returns \p false, \p dest is unchanged.
         */
-        bool dequeue(value_type &dest)
+        bool dequeue(value_type &dest, uuid_type* basket_id = nullptr)
         {
 
             dequeue_result res;
@@ -232,6 +220,9 @@ namespace cds { namespace container {
                 // I think, it is wrong
                 CDS_TSAN_ANNOTATE_IGNORE_READS_BEGIN;
                 dest = std::move(node_traits::to_value_ptr(*res.pNext)->m_value);
+                if (basket_id != nullptr) {
+                  *basket_id = res.pNext->m_basket_id;
+                }
                 CDS_TSAN_ANNOTATE_IGNORE_READS_END;
                 return true;
             }
@@ -239,9 +230,10 @@ namespace cds { namespace container {
         }
 
         /// Synonym for \p dequeue() function
-        bool pop(value_type &dest)
+        template <class... Args>
+        bool pop(Args&&... args)
         {
-            return dequeue(dest);
+            return dequeue(std::forward<Args>(args)...);
         }
 
         bool empty()
