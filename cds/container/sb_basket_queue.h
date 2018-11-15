@@ -51,20 +51,6 @@ namespace cds { namespace container {
                     : m_bag(size)
                 {
                 }
-
-                template <class... Args>
-                bool extract(Args &&... args)
-                {
-                    return m_bag.extract(std::forward<Args>(args)...);
-                }
-
-                template <class... Args>
-                bool insert(Args &&... args)
-                {
-                    return m_bag.insert(std::forward<Args>(args)...);
-                }
-
-                bool empty() const { return m_bag.empty(); }
             };
 
             typedef typename std::allocator_traits<typename traits::allocator>::template rebind_alloc<node_type> allocator_type;
@@ -132,6 +118,11 @@ namespace cds { namespace container {
         }
 
         bool empty() const { return m_counter.load(atomics::memory_order_acquire) <= 0; }
+        size_t size() const {
+          auto size_ = m_counter.load(atomics::memory_order_acquire);
+          assert(size_ >= 0);
+          return size_;
+        }
     };
 
     template <typename GC, typename T, template <class> class Bag, typename Traits = basket_queue::traits>
@@ -349,7 +340,7 @@ namespace cds { namespace container {
             while (true) {
                 if (pNew->m_basket_id == 0) {
                   pNew->m_basket_id = my_uuid;
-                  node.insert(val, id);
+                  node.m_bag.insert(val, id);
                 }
                 t = guard.protect(m_pTail, [](marked_ptr p) -> node_type * { return node_traits::to_value_ptr(p.ptr()); });
 
@@ -368,7 +359,7 @@ namespace cds { namespace container {
                     
                     if (pNew->m_basket_id != 0) {
                       pNew->m_basket_id = 0;
-                      node.extract(val, id);
+                      node.m_bag.extract(val, id);
                     }
 
                     // Reread tail next
@@ -379,7 +370,7 @@ namespace cds { namespace container {
                     //if ( m_pTail.load( memory_model::memory_order_relaxed ) == t &&
                     if (t->m_pNext.load(memory_model::memory_order_relaxed) == pNext && !pNext.bits()) {
                         bkoff();
-                        if (node.insert(val, id)) {
+                        if (node_traits::to_value_ptr(pNext.ptr())->m_bag.insert(val, id)) {
                             m_Stat.onAddBasket();
                             break;
                         }
@@ -516,9 +507,9 @@ namespace cds { namespace container {
                                     free_chain(h, pNext);
                             };
                             if (bDeque) {
-                                if (value_node->extract(res.value)) {
+                                if (value_node->m_bag.extract(res.value)) {
                                     res.basket_id = pNext->m_basket_id;
-                                    if (value_node->empty()) {
+                                    if (value_node->m_bag.empty()) {
                                         mark_deleted();
                                     }
                                     break;
@@ -528,7 +519,7 @@ namespace cds { namespace container {
                                 }
                             } else {
                                 // Not sure how thread safe that is
-                                return !value_node->empty();
+                                return !value_node->m_bag.empty();
                             }
                         }
                     }
