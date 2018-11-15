@@ -339,10 +339,7 @@ namespace cds { namespace container {
 
             marked_ptr t;
             while (true) {
-                if (pNew->m_basket_id == 0) {
-                  pNew->m_basket_id = my_uuid;
-                  node.m_bag.insert(val, id);
-                }
+                pNew->m_basket_id = my_uuid;
                 t = guard.protect(m_pTail, [](marked_ptr p) -> node_type * { return node_traits::to_value_ptr(p.ptr()); });
 
                 marked_ptr pNext = t->m_pNext.load(memory_model::memory_order_relaxed);
@@ -350,6 +347,9 @@ namespace cds { namespace container {
                 if (pNext.ptr() == nullptr) {
                     pNew->m_pNext.store(marked_ptr(), memory_model::memory_order_relaxed);
                     if (insert_policy::template _<memory_model>(t->m_pNext, pNext, marked_ptr(pNew))) {
+                        if (!node.m_bag.insert(val, id)) {
+                          continue;
+                        }
                         if (!m_pTail.compare_exchange_strong(t, marked_ptr(pNew), memory_model::memory_order_release, atomics::memory_order_relaxed))
                             m_Stat.onAdvanceTailFailed();
                         break;
@@ -358,11 +358,6 @@ namespace cds { namespace container {
                     // Try adding to basket
                     m_Stat.onTryAddBasket();
                     
-                    if (pNew->m_basket_id != 0) {
-                      pNew->m_basket_id = 0;
-                      node.m_bag.extract(val, id);
-                    }
-
                     // Reread tail next
                 try_again:
                     pNext = gNext.protect(t->m_pNext, [](marked_ptr p) -> node_type * { return node_traits::to_value_ptr(p.ptr()); });
