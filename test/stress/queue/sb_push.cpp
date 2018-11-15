@@ -185,6 +185,7 @@ namespace {
 
     using SBSimpleBasketQueue_HP = cds::container::SBBasketQueue<cds::gc::HP, std::pair<size_t, size_t>, SimpleBag>;
     using SBIdBasketQueue_HP = cds::container::SBBasketQueue<cds::gc::HP, std::pair<size_t, size_t>, IdBag>;
+    using SBStackBasketQueue_HP = cds::container::SBBasketQueue<cds::gc::HP, std::pair<size_t, size_t>, StackBag>;
 
     struct htm_traits : cds::container::sb_basket_queue::traits {
       typedef cds::intrusive::htm_basket_queue::htm_insert insert_policy;
@@ -192,15 +193,18 @@ namespace {
 
     using HTMSBSimpleBasketQueue_HP = cds::container::SBBasketQueue<cds::gc::HP, std::pair<size_t, size_t>, SimpleBag, htm_traits>;
     using HTMSBIdBasketQueue_HP = cds::container::SBBasketQueue<cds::gc::HP, std::pair<size_t, size_t>, IdBag, htm_traits>;
+    using HTMSBStackBasketQueue_HP = cds::container::SBBasketQueue<cds::gc::HP, std::pair<size_t, size_t>, StackBag, htm_traits>;
 
     static_assert(std::is_same<HTMSBSimpleBasketQueue_HP::insert_policy, htm_traits::insert_policy>::value, "Use htm");
 
     CDSSTRESS_QUEUE_F( SBSimpleBasketQueue_HP)
     CDSSTRESS_QUEUE_F( SBIdBasketQueue_HP)
+    CDSSTRESS_QUEUE_F( SBStackBasketQueue_HP)
 
 #ifdef CDS_HTM_SUPPORT
     CDSSTRESS_QUEUE_F( HTMSBSimpleBasketQueue_HP)
     CDSSTRESS_QUEUE_F( HTMSBIdBasketQueue_HP)
+    CDSSTRESS_QUEUE_F( HTMSBStackBasketQueue_HP)
 #endif // CDS_HTM_SUPPORT
 
 #undef CDSSTRESS_QUEUE_F

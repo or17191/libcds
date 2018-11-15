@@ -4,6 +4,10 @@
 #include <memory>
 #include <algorithm>
 
+#include <cds/algo/atomic.h>
+#include <cds/container/treiber_stack.h>
+#include <cds/gc/hp.h>
+
 namespace cds { namespace container {
 namespace bags {
     template <class T>
@@ -99,6 +103,34 @@ namespace bags {
               [](const value_type& v) { return v.value.flag; });
         }
     };
+
+    template <class T>
+    class StackBag
+    {
+    private:
+        TreiberStack<cds::gc::HP, T> m_bag;
+
+    public:
+        StackBag(size_t /*ids*/) {}
+
+        bool insert(T &t, size_t /*id*/)
+        {
+          return m_bag.push(std::move(t));
+        }
+        bool extract(T &t)
+        {
+          return m_bag.pop(t);
+        }
+
+        bool empty() const {
+          return m_bag.empty();
+        }
+        size_t size() const {
+          return m_bag.size();
+        }
+    };
+
+
 } // namespace bags
 }} // namespace cds::container
 
