@@ -53,9 +53,9 @@ namespace {
             virtual void test()
             {
                 using value_type = typename Queue::value_type;
-                size_t i = 0;
+                size_t i = 1;
                 const auto id_ = id();
-                while ( i < m_count ) {
+                while ( i <= m_count ) {
                     if ( m_Queue.push(value_type{id_, i}, id_)) {
                         ++i;
                     }
@@ -128,7 +128,6 @@ namespace {
 
             std::vector<record> values;
             values.reserve(s_nQueueSize);
-            values.emplace_back();
             int pops = 0;
             std::pair<size_t, size_t> value;
             cds::uuid_type basket;
