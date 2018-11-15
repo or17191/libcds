@@ -154,6 +154,8 @@ namespace cds { namespace container {
 
         static constexpr const size_t c_nHazardPtrCount = base_class::c_nHazardPtrCount; ///< Count of hazard pointer required for the algorithm
 
+        typedef typename base_class::insert_policy insert_policy;
+
     protected:
         typedef typename maker::node_type node_type;           ///< queue node type (derived from intrusive::basket_queue::node)
         typedef typename base_class::node_type base_node_type; ///< queue node type (derived from intrusive::basket_queue::node)
@@ -165,7 +167,6 @@ namespace cds { namespace container {
         typedef typename base_class::link_checker link_checker;
         typedef typename base_node_type::marked_ptr marked_ptr;
         typedef typename base_node_type::atomic_marked_ptr atomic_marked_ptr;
-        typedef typename base_class::insert_policy insert_policy;
         //@endcond
 
         struct dequeue_result
