@@ -299,13 +299,14 @@ namespace cds { namespace container {
                 if (pNext.ptr() == nullptr) {
                     pNew->m_pNext.store(marked_ptr(), memory_model::memory_order_relaxed);
                     if (insert_policy::template _<memory_model>(t->m_pNext, pNext, marked_ptr(pNew))) {
+                        if (!m_pTail.compare_exchange_strong(t, marked_ptr(pNew), memory_model::memory_order_release, atomics::memory_order_relaxed))
+                            m_Stat.onAdvanceTailFailed();
                         if (!node.m_bag.insert(val, id)) {
                           continue;
                         }
-                        if (!m_pTail.compare_exchange_strong(t, marked_ptr(pNew), memory_model::memory_order_release, atomics::memory_order_relaxed))
-                            m_Stat.onAdvanceTailFailed();
                         break;
                     }
+                    pNew->m_basket_id = 0;
 
                     // Try adding to basket
                     m_Stat.onTryAddBasket();
