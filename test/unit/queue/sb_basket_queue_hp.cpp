@@ -9,6 +9,7 @@
 #include <cds/gc/hp.h>
 #include <cds/algo/uuid.h>
 #include <cds/container/sb_basket_queue.h>
+#include <cds/container/bags.h>
 
 namespace {
     namespace cc = cds::container;
@@ -148,7 +149,7 @@ namespace {
         }
 
         template <class T>
-        using bag_t = cds::container::SimpleBag<T>;
+        using bag_t = cds::container::bags::SimpleBag<T>;
 
         void SetUp()
         {

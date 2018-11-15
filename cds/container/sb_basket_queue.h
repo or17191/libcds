@@ -77,54 +77,6 @@ namespace cds { namespace container {
     } // namespace details
     //@endcond
 
-    template <class T>
-    class SimpleBag
-    {
-    private:
-        struct PaddedT
-        {
-            T value;
-            char pad1_[cds::c_nCacheLineSize - sizeof(value)];
-        };
-        std::unique_ptr<PaddedT[]> m_bag;
-        char pad1_[cds::c_nCacheLineSize - sizeof(m_bag)];
-        atomics::atomic_int m_counter;
-        char pad2_[cds::c_nCacheLineSize - sizeof(m_counter)];
-        size_t m_size;
-
-    public:
-        SimpleBag(size_t ids) : m_bag(new PaddedT[ids]()), m_counter(0), m_size(ids) {}
-        bool insert(T &t, size_t /*id*/)
-        {
-            auto idx = m_counter.fetch_add(1, atomics::memory_order_relaxed);
-            assert(idx < m_size);
-            std::swap(t, m_bag[idx].value);
-            return true;
-        }
-        bool extract(T &t)
-        {
-            auto idx = m_counter.fetch_sub(1, atomics::memory_order_relaxed) - 1;
-            if (idx < 0) {
-                // Yes, there is a race here.
-                return false;
-            }
-            std::swap(t, m_bag[idx].value);
-            return true;
-        }
-
-        bool extract(T &t, size_t /*id*/)
-        {
-            return extract(t);
-        }
-
-        bool empty() const { return m_counter.load(atomics::memory_order_acquire) <= 0; }
-        size_t size() const {
-          auto size_ = m_counter.load(atomics::memory_order_acquire);
-          assert(size_ >= 0);
-          return size_;
-        }
-    };
-
     template <typename GC, typename T, template <class> class Bag, typename Traits = basket_queue::traits>
     class SBBasketQueue
     {

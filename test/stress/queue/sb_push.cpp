@@ -9,6 +9,7 @@
 #include <unordered_map>
 
 #include <cds/container/sb_basket_queue.h>
+#include <cds/container/bags.h>
 
 #include <cds_test/check_baskets.h>
 
@@ -180,20 +181,26 @@ namespace {
         QueueType::gc::force_dispose(); \
     }
 
-    using SBBasketQueue_HP = cds::container::SBBasketQueue<cds::gc::HP, std::pair<size_t, size_t>, cds::container::SimpleBag>;
+    using namespace cds::container::bags;
+
+    using SBSimpleBasketQueue_HP = cds::container::SBBasketQueue<cds::gc::HP, std::pair<size_t, size_t>, SimpleBag>;
+    using SBIdBasketQueue_HP = cds::container::SBBasketQueue<cds::gc::HP, std::pair<size_t, size_t>, IdBag>;
 
     struct htm_traits : cds::container::sb_basket_queue::traits {
       typedef cds::intrusive::htm_basket_queue::htm_insert insert_policy;
     };
 
-    using HTMSBBasketQueue_HP = cds::container::SBBasketQueue<cds::gc::HP, std::pair<size_t, size_t>, cds::container::SimpleBag, htm_traits>;
+    using HTMSBSimpleBasketQueue_HP = cds::container::SBBasketQueue<cds::gc::HP, std::pair<size_t, size_t>, SimpleBag, htm_traits>;
+    using HTMSBIdBasketQueue_HP = cds::container::SBBasketQueue<cds::gc::HP, std::pair<size_t, size_t>, IdBag, htm_traits>;
 
-    static_assert(std::is_same<HTMSBBasketQueue_HP::insert_policy, htm_traits::insert_policy>::value, "Use htm");
+    static_assert(std::is_same<HTMSBSimpleBasketQueue_HP::insert_policy, htm_traits::insert_policy>::value, "Use htm");
 
-    CDSSTRESS_QUEUE_F( SBBasketQueue_HP)
+    CDSSTRESS_QUEUE_F( SBSimpleBasketQueue_HP)
+    CDSSTRESS_QUEUE_F( SBIdBasketQueue_HP)
 
 #ifdef CDS_HTM_SUPPORT
-    CDSSTRESS_QUEUE_F( HTMSBBasketQueue_HP)
+    CDSSTRESS_QUEUE_F( HTMSBSimpleBasketQueue_HP)
+    CDSSTRESS_QUEUE_F( HTMSBIdBasketQueue_HP)
 #endif // CDS_HTM_SUPPORT
 
 #undef CDSSTRESS_QUEUE_F
