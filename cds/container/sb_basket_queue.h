@@ -503,9 +503,10 @@ namespace cds { namespace container {
                         else {
                             auto value_node = node_traits::to_value_ptr(*pNext.ptr());
                             auto mark_deleted = [&] {
-                                iter->m_pNext.compare_exchange_weak(pNext, marked_ptr(pNext.ptr(), 1), memory_model::memory_order_acquire, atomics::memory_order_relaxed);
-                                if (hops >= m_nMaxHops)
-                                    free_chain(h, pNext);
+                                if(iter->m_pNext.compare_exchange_weak(pNext, marked_ptr(pNext.ptr(), 1), memory_model::memory_order_acquire, atomics::memory_order_relaxed)) {
+                                  if (hops >= m_nMaxHops)
+                                      free_chain(h, pNext);
+                                }
                             };
                             if (bDeque) {
                                 if (value_node->m_bag.extract(res.value)) {
@@ -520,6 +521,7 @@ namespace cds { namespace container {
                                 }
                             } else {
                                 // Not sure how thread safe that is
+                                res.basket_id = pNext->m_basket_id;
                                 return !value_node->m_bag.empty();
                             }
                         }
