@@ -22,7 +22,7 @@ namespace {
 
     struct empty {};
 
-    class intrusive_queue_push : public cds_test::stress_fixture
+    class sb_queue_push : public cds_test::stress_fixture
     {
         typedef cds_test::stress_fixture base_class;
 
@@ -174,7 +174,7 @@ namespace {
     };
 
 #define CDSSTRESS_QUEUE_F( QueueType ) \
-    TEST_F( intrusive_queue_push, QueueType ) \
+    TEST_F( sb_queue_push, QueueType ) \
     { \
         QueueType q(s_nThreadCount); \
         test( q ); \
