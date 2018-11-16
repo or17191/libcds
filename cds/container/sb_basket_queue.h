@@ -127,6 +127,7 @@ namespace cds { namespace container {
             value_type value;
             uuid_type basket_id;
         };
+
         //@cond
         atomic_marked_ptr m_pHead; ///< Queue's head pointer (aligned)
         typename opt::details::apply_padding<atomic_marked_ptr, traits::padding>::padding_type pad1_;
@@ -161,10 +162,18 @@ namespace cds { namespace container {
         typedef std::unique_ptr<node_type, node_disposer> scoped_node_ptr;
         //@endcond
 
+    private:
+        struct padded_ptr {
+          scoped_node_ptr node;
+          typename opt::details::apply_padding<std::unique_ptr<node_type>, traits::padding>::padding_type pad1_;
+        };
+        std::unique_ptr<padded_ptr[]> m_nodes_cache;
+
     public:
         /// Initializes empty queue
         SBBasketQueue(size_t ids)
-            : m_Dummy(0), m_pHead(&m_Dummy), m_pTail(&m_Dummy), m_nMaxHops(3), m_ids(ids)
+            : m_Dummy(0), m_pHead(&m_Dummy), m_pTail(&m_Dummy), m_nMaxHops(3), m_ids(ids),
+            m_nodes_cache(new padded_ptr[m_ids]())
         {
         }
 
@@ -203,7 +212,10 @@ namespace cds { namespace container {
         template <class Arg>
         bool enqueue(Arg &&val, size_t id)
         {
-            scoped_node_ptr p(alloc_node());
+            auto& p = m_nodes_cache[id].node;
+            if (p == nullptr) {
+              p.reset(alloc_node());
+            }
             if (do_enqueue(*p, std::forward<Arg>(val), id)) {
                 if(node_traits::to_node_ptr(*p)->m_basket_id != 0) {
                   p.release();
