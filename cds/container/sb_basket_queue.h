@@ -163,9 +163,10 @@ namespace cds { namespace container {
         //@endcond
 
     private:
-        struct padded_ptr {
-          scoped_node_ptr node;
-          typename opt::details::apply_padding<std::unique_ptr<node_type>, traits::padding>::padding_type pad1_;
+        struct padded_ptr
+        {
+            scoped_node_ptr node;
+            typename opt::details::apply_padding<std::unique_ptr<node_type>, traits::padding>::padding_type pad1_;
         };
         std::unique_ptr<padded_ptr[]> m_nodes_cache;
 
@@ -173,7 +174,7 @@ namespace cds { namespace container {
         /// Initializes empty queue
         SBBasketQueue(size_t ids)
             : m_Dummy(0), m_pHead(&m_Dummy), m_pTail(&m_Dummy), m_nMaxHops(3), m_ids(ids),
-            m_nodes_cache(new padded_ptr[m_ids]())
+              m_nodes_cache(new padded_ptr[m_ids]())
         {
         }
 
@@ -212,13 +213,13 @@ namespace cds { namespace container {
         template <class Arg>
         bool enqueue(Arg &&val, size_t id)
         {
-            auto& p = m_nodes_cache[id].node;
+            auto &p = m_nodes_cache[id].node;
             if (p == nullptr) {
-              p.reset(alloc_node());
+                p.reset(alloc_node());
             }
             if (do_enqueue(*p, std::forward<Arg>(val), id)) {
-                if(node_traits::to_node_ptr(*p)->m_basket_id != 0) {
-                  p.release();
+                if (node_traits::to_node_ptr(*p)->m_basket_id != 0) {
+                    p.release();
                 }
                 return true;
             }
@@ -314,7 +315,7 @@ namespace cds { namespace container {
                         if (!m_pTail.compare_exchange_strong(t, marked_ptr(pNew), memory_model::memory_order_release, atomics::memory_order_relaxed))
                             m_Stat.onAdvanceTailFailed();
                         if (!node.m_bag.insert(val, id)) {
-                          continue;
+                            continue;
                         }
                         break;
                     }
@@ -322,7 +323,7 @@ namespace cds { namespace container {
 
                     // Try adding to basket
                     m_Stat.onTryAddBasket();
-                    
+
                     // Reread tail next
                 try_again:
                     pNext = gNext.protect(t->m_pNext, [](marked_ptr p) -> node_type * { return node_traits::to_value_ptr(p.ptr()); });
@@ -463,9 +464,9 @@ namespace cds { namespace container {
                         else {
                             auto value_node = node_traits::to_value_ptr(*pNext.ptr());
                             auto mark_deleted = [&] {
-                                if(iter->m_pNext.compare_exchange_weak(pNext, marked_ptr(pNext.ptr(), 1), memory_model::memory_order_acquire, atomics::memory_order_relaxed)) {
-                                  if (hops >= m_nMaxHops)
-                                      free_chain(h, pNext);
+                                if (iter->m_pNext.compare_exchange_weak(pNext, marked_ptr(pNext.ptr(), 1), memory_model::memory_order_acquire, atomics::memory_order_relaxed)) {
+                                    if (hops >= m_nMaxHops)
+                                        free_chain(h, pNext);
                                 }
                             };
                             if (bDeque) {
