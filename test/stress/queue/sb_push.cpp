@@ -9,9 +9,34 @@
 #include <unordered_map>
 
 #include <cds/container/sb_basket_queue.h>
+#include <cds/container/wf_queue.h>
 #include <cds/container/bags.h>
 
 #include <cds_test/check_baskets.h>
+
+namespace cds_test {
+
+    template <typename Counter>
+    static inline property_stream& operator <<( property_stream& o, cds::container::wf_queue::stat<Counter> const& s )
+    {
+        return o
+            << CDSSTRESS_STAT_OUT( s, m_EnqueueCount )
+            << CDSSTRESS_STAT_OUT( s, m_EnqueueRace )
+            << CDSSTRESS_STAT_OUT( s, m_DequeueCount )
+            << CDSSTRESS_STAT_OUT( s, m_EmptyDequeue )
+            << CDSSTRESS_STAT_OUT( s, m_DequeueRace )
+            << CDSSTRESS_STAT_OUT( s, m_AdvanceTailError )
+            << CDSSTRESS_STAT_OUT( s, m_BadTail )
+            << CDSSTRESS_STAT_OUT( s, m_TryAddBasket )
+            << CDSSTRESS_STAT_OUT( s, m_AddBasketCount )
+            << CDSSTRESS_STAT_OUT( s, m_NullBasket );
+    }
+
+    static inline property_stream& operator <<( property_stream& o, cds::container::wf_queue::empty_stat const& /*s*/ )
+    {
+        return o;
+    }
+}
 
 // Multi-threaded random queue test
 namespace {
@@ -225,5 +250,19 @@ namespace {
 #endif // CDS_HTM_SUPPORT
 
 #undef CDSSTRESS_QUEUE_F
+
+#define CDSSTRESS_QUEUE_F( QueueType ) \
+    TEST_F( sb_queue_push, QueueType ) \
+    { \
+        QueueType q(s_nThreadCount); \
+        test( q , std::false_type{}); \
+        QueueType::gc::force_dispose(); \
+    }
+
+    using WFQueue = cds::container::WFQueue<gc_type, value_type>;
+    CDSSTRESS_QUEUE_F( WFQueue )
+
+#undef CDSSTRESS_QUEUE_F
+
 
 } // namespace
