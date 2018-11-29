@@ -501,7 +501,7 @@ namespace cds { namespace container {
           id_t j;
           for(j = curr->id; j < i / traits::node_size; ++j) {
             auto next = curr->next.load(memory_model::memory_order_relaxed);
-            if (next != nullptr) {
+            if (next == nullptr) {
               auto tmp = handle.spare.get();
               if (!tmp) {
                 handle.spare.reset(alloc_node());
