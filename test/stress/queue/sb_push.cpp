@@ -93,7 +93,7 @@ namespace {
 
     protected:
         template <class It>
-        void check_baskets(It first, It last) {
+        void check_baskets(It first, It last, std::true_type) {
           using value_type = decltype(*first);
           auto checker = cds_test::BasketsChecker::make(first, last, [](const value_type& e) { return e.basket_id; });
           EXPECT_EQ(0, checker.null_basket_count);
@@ -104,8 +104,23 @@ namespace {
           propout() << std::make_pair("basket_std", mean_std.second);
         }
 
-        template <class Queue, class HasBaskets = std::false_type>
-        void test( Queue& q )
+        template <class It>
+        void check_baskets(It first, It last, std::false_type) {
+        }
+
+        template <class Queue, class Value>
+        bool pop(Queue& q, Value& value, size_t tid, cds::uuid_type& basket, std::true_type) {
+          return q.pop(value, tid, std::addressof(basket));
+        }
+
+        template <class Queue, class Value>
+        bool pop(Queue& q, Value& value, size_t tid, cds::uuid_type& basket, std::false_type) {
+          basket = 0;
+          return q.pop(value, tid);
+        }
+
+        template <class Queue, class HasBaskets>
+        void test( Queue& q, HasBaskets)
         {
             s_nThreadPushCount = s_nQueueSize / s_nThreadCount;
             s_nQueueSize = s_nThreadPushCount * s_nThreadCount;
@@ -132,18 +147,18 @@ namespace {
             int pops = 0;
             std::pair<size_t, size_t> value;
             cds::uuid_type basket;
-            while(q.pop(value, &basket)) {
+            while(pop(q, value, 0, basket, HasBaskets{})) {
               ++pops;
               values.emplace_back(record{value.first, value.second, basket});
             }
             values.pop_back();
             EXPECT_EQ(s_nQueueSize, pops);
-            EXPECT_TRUE( q.empty());
+            EXPECT_FALSE(pop(q, value, 0, basket, HasBaskets{}));
 
             analyze( q, values.begin(), values.end());
 
             propout() << q.statistics();
-            check_baskets(values.begin(), values.end());
+            check_baskets(values.begin(), values.end(), HasBaskets{});
         }
 
         template <class Queue, class It>
@@ -177,23 +192,25 @@ namespace {
     TEST_F( sb_queue_push, QueueType ) \
     { \
         QueueType q(s_nThreadCount); \
-        test( q ); \
+        test( q , std::true_type{}); \
         QueueType::gc::force_dispose(); \
     }
 
     using namespace cds::container::bags;
+    using value_type = std::pair<size_t, size_t>;
+    using gc_type = cds::gc::HP;
 
-    using SBSimpleBasketQueue_HP = cds::container::SBBasketQueue<cds::gc::HP, std::pair<size_t, size_t>, SimpleBag>;
-    using SBIdBasketQueue_HP = cds::container::SBBasketQueue<cds::gc::HP, std::pair<size_t, size_t>, IdBag>;
-    using SBStackBasketQueue_HP = cds::container::SBBasketQueue<cds::gc::HP, std::pair<size_t, size_t>, StackBag>;
+    using SBSimpleBasketQueue_HP = cds::container::SBBasketQueue<gc_type, value_type, SimpleBag>;
+    using SBIdBasketQueue_HP = cds::container::SBBasketQueue<gc_type, value_type, IdBag>;
+    using SBStackBasketQueue_HP = cds::container::SBBasketQueue<gc_type, value_type, StackBag>;
 
     struct htm_traits : cds::container::sb_basket_queue::traits {
       typedef cds::intrusive::htm_basket_queue::htm_insert insert_policy;
     };
 
-    using HTMSBSimpleBasketQueue_HP = cds::container::SBBasketQueue<cds::gc::HP, std::pair<size_t, size_t>, SimpleBag, htm_traits>;
-    using HTMSBIdBasketQueue_HP = cds::container::SBBasketQueue<cds::gc::HP, std::pair<size_t, size_t>, IdBag, htm_traits>;
-    using HTMSBStackBasketQueue_HP = cds::container::SBBasketQueue<cds::gc::HP, std::pair<size_t, size_t>, StackBag, htm_traits>;
+    using HTMSBSimpleBasketQueue_HP = cds::container::SBBasketQueue<gc_type, value_type, SimpleBag, htm_traits>;
+    using HTMSBIdBasketQueue_HP = cds::container::SBBasketQueue<gc_type, value_type, IdBag, htm_traits>;
+    using HTMSBStackBasketQueue_HP = cds::container::SBBasketQueue<gc_type, value_type, StackBag, htm_traits>;
 
     static_assert(std::is_same<HTMSBSimpleBasketQueue_HP::insert_policy, htm_traits::insert_policy>::value, "Use htm");
 

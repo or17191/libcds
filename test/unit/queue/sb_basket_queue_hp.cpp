@@ -43,7 +43,7 @@ namespace {
 
             for ( size_t i = 0; i < nSize; ++i ) {
                 it = -1;
-                ASSERT_TRUE( q.dequeue( it, &basket ));
+                ASSERT_TRUE( q.dequeue( it, 0, &basket ));
                 ASSERT_EQ( it, static_cast<value_type>( i ));
                 ASSERT_CONTAINER_SIZE( q, nSize - i - 1 );
             }
@@ -61,7 +61,7 @@ namespace {
 
             for ( size_t i = 0; i < nSize; ++i ) {
                 it = -1;
-                ASSERT_TRUE( q.pop( it , &basket));
+                ASSERT_TRUE( q.pop( it , 0, &basket));
                 ASSERT_EQ( it, static_cast<value_type>( i ));
                 ASSERT_CONTAINER_SIZE( q, nSize - i - 1 );
             }
@@ -81,12 +81,12 @@ namespace {
 
             // pop from empty queue
             it = nSize * 2;
-            ASSERT_FALSE( q.pop( it ));
+            ASSERT_FALSE( q.pop( it, 0 ));
             ASSERT_EQ( it, static_cast<value_type>( nSize * 2 ));
             ASSERT_TRUE( q.empty());
             ASSERT_CONTAINER_SIZE( q, 0 );
 
-            ASSERT_FALSE( q.dequeue( it ));
+            ASSERT_FALSE( q.dequeue( it, 0 ));
             ASSERT_EQ( it, static_cast<value_type>( nSize * 2 ));
             ASSERT_TRUE( q.empty());
             ASSERT_CONTAINER_SIZE( q, 0 );
@@ -112,9 +112,9 @@ namespace {
                 std::string s;
                 for ( size_t i = 0; i < nSize; ++i ) {
                     if ( i & 1 )
-                        ASSERT_TRUE( q.pop( s ));
+                        ASSERT_TRUE( q.pop( s, 0 ));
                     else
-                        ASSERT_TRUE( q.dequeue( s ));
+                        ASSERT_TRUE( q.dequeue( s, 0 ));
 
                     ASSERT_CONTAINER_SIZE( q, nSize - i - 1 );
                     ASSERT_EQ( s, str[i] );
@@ -140,7 +140,7 @@ namespace {
 
             for ( size_t i = 0; i < nSize; ++i ) {
                 std::string s;
-                ASSERT_TRUE( q.pop( s ));
+                ASSERT_TRUE( q.pop( s, 0 ));
                 ASSERT_CONTAINER_SIZE( q, nSize - i - 1 );
                 ASSERT_EQ( s, str[i] );
             }

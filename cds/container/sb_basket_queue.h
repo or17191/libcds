@@ -238,7 +238,7 @@ namespace cds { namespace container {
             dequeued value. The assignment operator for \p value_type is invoked.
             If queue is empty, the function returns \p false, \p dest is unchanged.
         */
-        bool dequeue(value_type &dest, uuid_type *basket_id = nullptr)
+        bool dequeue(value_type &dest, size_t /*tid*/, uuid_type *basket_id = nullptr)
         {
 
             dequeue_result res;
