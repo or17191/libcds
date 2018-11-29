@@ -190,12 +190,14 @@ namespace cds { namespace container {
 
 
             struct cell_t {
-              atomic_value_ptr val{nullptr};
+              atomic_value_ptr val{bot<value_ptr>()};
               typename opt::details::apply_padding< decltype(val), traits::padding >::padding_type pad1_;
-              typename gc::template atomic_marked_ptr<enq_ptr_t> enq{nullptr};
+              typename gc::template atomic_marked_ptr<enq_ptr_t> enq{bot<enq_ptr_t>()};
               typename opt::details::apply_padding< decltype(enq), traits::padding >::padding_type pad2_;
-              typename gc::template atomic_marked_ptr<deq_ptr_t> deq{nullptr};
+              typename gc::template atomic_marked_ptr<deq_ptr_t> deq{bot<deq_ptr_t>()};
               typename opt::details::apply_padding< decltype(deq), traits::padding >::padding_type pad3_;
+
+              cell_t() = default;
             };
 
             struct node_type;
@@ -205,12 +207,14 @@ namespace cds { namespace container {
 
             struct node_type
             {
-                atomic_node_ptr next;
+                atomic_node_ptr next{nullptr};
                 typename opt::details::apply_padding< decltype(next), traits::padding >::padding_type pad1_;
-                id_t id;
+                id_t id{0};
                 typename opt::details::apply_padding< decltype(id), traits::padding >::padding_type pad2_;
-                std::array<cell_t, traits::node_size> cells;
+                std::array<cell_t, traits::node_size> cells{};
                 typename opt::details::apply_padding< decltype(cells), traits::padding >::padding_type pad3_;
+
+                node_type() = default;
             };
 
 
@@ -297,7 +301,7 @@ namespace cds { namespace container {
         typename opt::details::apply_padding<decltype(Di), traits::padding>::padding_type pad2_;
         atomic_id_t Hi; ///< dummy node
         typename opt::details::apply_padding<decltype(Hi), traits::padding>::padding_type pad3_;
-        typename gc::template atomic_marked_ptr<node_ptr> Hp;
+        typename maker::atomic_node_ptr Hp;
         typename opt::details::apply_padding<decltype(Hp), traits::padding>::padding_type pad4_;
         std::unique_ptr<handle_type[]> m_handle;
         item_counter m_ItemCounter; ///< Item counter
@@ -356,10 +360,15 @@ namespace cds { namespace container {
         /// Destructor clears the queue
         ~WFQueue()
         {
-          // TODO write me
+          clear(0);
+          cleanup(m_handle[0]);
+          auto pos = Hp.load(memory_model::memory_order_relaxed);
+          while(pos != nullptr) {
+            auto tmp = pos->next.load(memory_model::memory_order_relaxed);
+            typename maker::node_deallocator{}(pos.ptr());
+            pos = tmp;
+          }
         }
-
-        // TODO understand the semantics of spin()
 
         /// Enqueues \p val value into the queue.
         /**
@@ -380,11 +389,12 @@ namespace cds { namespace container {
                 break; 
               }
             }
-            if(!value) {
+            if(id >= 0) {
               enq_slow(handle, value, id);
             }
             handle.enq_node_id = handle.Ep.load(memory_model::memory_order_relaxed)->id;
             handle.hzd_node_id.store(-1, memory_model::memory_order_release);
+            ++m_ItemCounter;
             return true;
         }
 
@@ -405,23 +415,22 @@ namespace cds { namespace container {
             auto& handle = m_handle[tid];
             handle.hzd_node_id.store(handle.deq_node_id, memory_model::memory_order_acquire);
 
-            auto value = maker::template top<value_ptr>();
+            auto v = maker::template top<value_ptr>();
             id_t id = 0;
             for(size_t i = 0 ; i < traits::max_patience; ++i) {
-              auto value = deq_fast(handle, id);
-              if (!maker::is_top(value)) {
+              v= deq_fast(handle, id);
+              if (!maker::is_top(v)) {
                 break;
               }
             }
-            value_ptr v{nullptr};
-            if (maker::is_top(value)) {
+            if (maker::is_top(v)) {
               v = deq_slow(handle, id);
             } else {
               m_Stat.onFastDequeue();
             }
 
 
-            if (!maker::is_bot(value)) {
+            if (!maker::is_bot(v)) {
               help_deq(handle, handle.Dh);
               handle.Dh = handle.Dh->next;
             } else {
@@ -440,6 +449,7 @@ namespace cds { namespace container {
             } else {
               std::swap(dest, *v.ptr());
               typename maker::value_deallocator{}(v.ptr());
+              --m_ItemCounter;
               return true;
             }
         }
@@ -553,7 +563,9 @@ namespace cds { namespace container {
           auto v = help_enq(handle, c, i);
           auto cd = maker::template bot<deq_ptr_t>();
           if(maker::is_bot(v)) { return maker::template bot<value_ptr>(); }
-          if(!maker::is_top(v) && c->deq.compare_exchange_strong(cd, maker::template top<deq_ptr_t>(), memory_model::memory_order_relaxed)) { return v; }
+          if(!maker::is_top(v) && c->deq.compare_exchange_strong(cd, maker::template top<deq_ptr_t>(), memory_model::memory_order_relaxed)) {
+            return v;
+          }
           id = i;
           return maker::template top<value_ptr>();
         }
@@ -572,7 +584,7 @@ namespace cds { namespace container {
 
         value_ptr help_enq(handle_type& handle, typename maker::cell_t* c, id_t i) {
           auto v = spin(c->val);
-          if (v.ptr() || (maker::is_bot(v) && !c->val.compare_exchange_strong(v, maker::template top<value_ptr>(), memory_model::memory_order_seq_cst))) {
+          if (v.ptr() || (maker::is_bot(v) && !c->val.compare_exchange_strong(v, maker::template top<value_ptr>(), memory_model::memory_order_seq_cst) && !maker::is_top(v))) {
             return v;
           }
 
@@ -589,7 +601,7 @@ namespace cds { namespace container {
               handle.Ei = 0;
               handle.Eh = ph->next;
               ph = handle.Eh;
-              pe = std::addressof(ph->Er);
+              pe = enq_ptr_t(std::addressof(ph->Er));
               id = pe->id;
             }
             if(id > 0 && id <= i && !c->enq.compare_exchange_strong(e, pe, memory_model::memory_order_relaxed, memory_model::memory_order_relaxed)) {
