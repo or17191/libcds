@@ -29,6 +29,7 @@ set(CDSSTRESS_QUEUE_PUSHPOP stress-queue-push-pop)
 set(CDSSTRESS_QUEUE_PUSHPOP_SOURCES
     ../main.cpp
     push_pop.cpp
+    sb_push_pop.cpp
     intrusive_push_pop.cpp    
 )
 add_executable(${CDSSTRESS_QUEUE_PUSHPOP} ${CDSSTRESS_QUEUE_PUSHPOP_SOURCES})
