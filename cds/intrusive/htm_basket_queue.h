@@ -30,6 +30,7 @@ namespace cds { namespace intrusive {
               return true;
             }
           } while (!status.explicit_() && !(status.conflict() && !status.retry()));
+          old = var.load(MemoryModel::memory_order_relaxed);
           return false;
         }
       };
