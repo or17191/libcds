@@ -167,10 +167,11 @@ namespace {
             values.reserve(s_nQueueSize);
             int pops = 0;
             std::pair<size_t, size_t> value;
-            cds::uuid_type basket;
+            cds::uuid_type basket = 0;
             while(pop(q, value, 0, basket, HasBaskets{})) {
               ++pops;
               values.emplace_back(record{value.first, value.second, basket});
+              basket = 0;
             }
             values.pop_back();
             EXPECT_EQ(s_nQueueSize, pops);

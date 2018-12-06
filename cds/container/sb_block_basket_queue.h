@@ -369,13 +369,14 @@ namespace cds { namespace container {
 
             auto v = maker::template top<value_ptr>();
             id_t id = 0;
-            for(size_t i = 0 ; i < traits::max_patience; ++i) {
+            for(size_t i = 0 ; i < 2 * nprocs; ++i) { // TODO quickfix, to skip empty cells
               v= deq_fast(handle, id, basket_id);
               if (!maker::is_top(v)) {
                 break;
               }
             }
             if (maker::is_top(v)) {
+              std::terminate();
               v = deq_slow(handle, id);
             } else {
               m_Stat.onFastDequeue();
@@ -741,10 +742,12 @@ namespace cds { namespace container {
         }
 
         id_t allocate_basket(const handle_type& handle) {
-          auto ei = Ei.load(memory_model::memory_order_relaxed);
-          auto tmp = ei;
-          insert_policy::template _<memory_model>(Ei, tmp, id_t(ei + nprocs));
-          return ei + handle.id;
+          auto ei = Ei.load(memory_model::memory_order_acquire);
+          if(insert_policy::template _<memory_model>(Ei, ei, id_t(ei + nprocs))) {
+            return ei + handle.id;
+          } else {
+            return ei - nprocs + handle.id;
+          }
         }
     };
 
