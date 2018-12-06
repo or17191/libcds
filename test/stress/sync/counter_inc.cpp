@@ -118,9 +118,21 @@ namespace {
       }
     };
 
+    template <class Delay>
+    struct FAAPolicy {
+      typedef atomics::atomic_size_t counter_type;
+      static bool _(counter_type& counter) {
+        auto old = counter.load(atomics::memory_order_acquire);
+        spin(1000, Delay{});
+        counter.fetch_add(1, atomics::memory_order_release);
+        return true; // FAA always works.
+      }
+    };
+
 #ifdef CDS_HTM_SUPPORT
     TEST_F(counter_inc, htm) { test<HTMPolicy<std::true_type>>(); }
     TEST_F(counter_inc, cas) { test<CASPolicy<std::true_type>>(); }
+    TEST_F(counter_inc, faa) { test<FAAPolicy<std::true_type>>(); }
 #endif // CDS_HTM_SUPPORT
 
     class dual_counter_inc : public counter_inc {
