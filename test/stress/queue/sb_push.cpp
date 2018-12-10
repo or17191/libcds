@@ -10,6 +10,7 @@
 
 #include <cds/container/sb_basket_queue.h>
 #include <cds/container/wf_queue.h>
+#include <cds/container/sb_block_basket_queue.h>
 #include <cds/container/bags.h>
 
 #include <cds_test/check_baskets.h>
@@ -20,16 +21,11 @@ namespace cds_test {
     static inline property_stream& operator <<( property_stream& o, cds::container::wf_queue::stat<Counter> const& s )
     {
         return o
-            << CDSSTRESS_STAT_OUT( s, m_EnqueueCount )
-            << CDSSTRESS_STAT_OUT( s, m_EnqueueRace )
-            << CDSSTRESS_STAT_OUT( s, m_DequeueCount )
-            << CDSSTRESS_STAT_OUT( s, m_EmptyDequeue )
-            << CDSSTRESS_STAT_OUT( s, m_DequeueRace )
-            << CDSSTRESS_STAT_OUT( s, m_AdvanceTailError )
-            << CDSSTRESS_STAT_OUT( s, m_BadTail )
-            << CDSSTRESS_STAT_OUT( s, m_TryAddBasket )
-            << CDSSTRESS_STAT_OUT( s, m_AddBasketCount )
-            << CDSSTRESS_STAT_OUT( s, m_NullBasket );
+            << CDSSTRESS_STAT_OUT( s, m_FastEnqueue )
+            << CDSSTRESS_STAT_OUT( s, m_FastDequeue )
+            << CDSSTRESS_STAT_OUT( s, m_SlowEnqueue )
+            << CDSSTRESS_STAT_OUT( s, m_SlowDequeue )
+            << CDSSTRESS_STAT_OUT( s, m_Empty );
     }
 
     static inline property_stream& operator <<( property_stream& o, cds::container::wf_queue::empty_stat const& /*s*/ )
@@ -102,7 +98,7 @@ namespace {
 
         static void SetUpTestCase()
         {
-            cds_test::config const& cfg = get_config( "queue_push" );
+            cds_test::config const& cfg = get_config( "sb_queue_push" );
 
             s_nThreadCount = cfg.get_size_t( "ThreadCount", s_nThreadCount );
             s_nQueueSize = cfg.get_size_t( "QueueSize", s_nQueueSize );
@@ -171,10 +167,11 @@ namespace {
             values.reserve(s_nQueueSize);
             int pops = 0;
             std::pair<size_t, size_t> value;
-            cds::uuid_type basket;
+            cds::uuid_type basket = 0;
             while(pop(q, value, 0, basket, HasBaskets{})) {
               ++pops;
               values.emplace_back(record{value.first, value.second, basket});
+              basket = 0;
             }
             values.pop_back();
             EXPECT_EQ(s_nQueueSize, pops);
@@ -251,17 +248,42 @@ namespace {
 
 #undef CDSSTRESS_QUEUE_F
 
-#define CDSSTRESS_QUEUE_F( QueueType ) \
+#define CDSSTRESS_QUEUE_F( QueueType, HasBasket ) \
     TEST_F( sb_queue_push, QueueType ) \
     { \
         QueueType q(s_nThreadCount); \
-        test( q , std::false_type{}); \
+        test( q , HasBasket{}); \
         QueueType::gc::force_dispose(); \
     }
 
     using WFQueue = cds::container::WFQueue<gc_type, value_type>;
-    CDSSTRESS_QUEUE_F( WFQueue )
+    CDSSTRESS_QUEUE_F( WFQueue, std::false_type )
 
+    struct stat_wf_queue : public cds::container::wf_queue::traits {
+      typedef cds::container::wf_queue::stat<> stat;
+    };
+
+    using WFQueue_stat = cds::container::WFQueue<gc_type, value_type, stat_wf_queue>;
+    CDSSTRESS_QUEUE_F( WFQueue_stat, std::false_type )
+/*
+    struct stat_block_queue : public cds::container::sb_block_basket_queue::traits {
+      typedef cds::container::wf_queue::stat<> stat;
+    };
+
+    using SBBlockBasketQueue = cds::container::SBBlockBasketQueue<gc_type, value_type>;
+    CDSSTRESS_QUEUE_F( SBBlockBasketQueue, std::true_type )
+
+    using SBBlockBasketQueue_stat = cds::container::SBBlockBasketQueue<gc_type, value_type, stat_block_queue>;
+    CDSSTRESS_QUEUE_F( SBBlockBasketQueue_stat, std::true_type )
+
+    struct htm_block_basket : public cds::container::sb_block_basket_queue::traits {
+      typedef cds::intrusive::htm_basket_queue::htm_insert insert_policy;
+    };
+
+    using SBHTMBlockBasketQueue = cds::container::SBBlockBasketQueue<gc_type, value_type, htm_block_basket>;
+    static_assert(std::is_same<cds::intrusive::htm_basket_queue::htm_insert, SBHTMBlockBasketQueue::insert_policy>::value, "");
+    CDSSTRESS_QUEUE_F( SBHTMBlockBasketQueue , std::true_type )
+*/
 #undef CDSSTRESS_QUEUE_F
 
 
