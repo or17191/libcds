@@ -98,7 +98,7 @@ namespace {
 
         static void SetUpTestCase()
         {
-            cds_test::config const& cfg = get_config( "queue_push" );
+            cds_test::config const& cfg = get_config( "sb_queue_push" );
 
             s_nThreadCount = cfg.get_size_t( "ThreadCount", s_nThreadCount );
             s_nQueueSize = cfg.get_size_t( "QueueSize", s_nQueueSize );
@@ -265,7 +265,7 @@ namespace {
 
     using WFQueue_stat = cds::container::WFQueue<gc_type, value_type, stat_wf_queue>;
     CDSSTRESS_QUEUE_F( WFQueue_stat, std::false_type )
-
+/*
     struct stat_block_queue : public cds::container::sb_block_basket_queue::traits {
       typedef cds::container::wf_queue::stat<> stat;
     };
@@ -282,8 +282,8 @@ namespace {
 
     using SBHTMBlockBasketQueue = cds::container::SBBlockBasketQueue<gc_type, value_type, htm_block_basket>;
     static_assert(std::is_same<cds::intrusive::htm_basket_queue::htm_insert, SBHTMBlockBasketQueue::insert_policy>::value, "");
-    //CDSSTRESS_QUEUE_F( SBHTMBlockBasketQueue )
-
+    CDSSTRESS_QUEUE_F( SBHTMBlockBasketQueue , std::true_type )
+*/
 #undef CDSSTRESS_QUEUE_F
 
 
