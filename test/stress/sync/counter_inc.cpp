@@ -13,6 +13,7 @@ namespace {
       protected:
         static size_t s_nThreadCount;
         static size_t s_nIncrementCount;
+        static size_t s_nThreadIncrementCount;
 
         template <class IncrementPolicy>
         class Worker : public cds_test::thread {
@@ -34,7 +35,7 @@ namespace {
 
             virtual void test() {
                 auto& counter=m_counter;
-                for (size_t pass = 0; pass < s_nIncrementCount; ++pass) {
+                for (size_t pass = 0; pass < s_nThreadIncrementCount; ++pass) {
                     auto res = IncrementPolicy::_(counter);
                     m_nSuccess += static_cast<bool>(res);
                 }
@@ -59,6 +60,9 @@ namespace {
       protected:
         template <class IncrementPolicy>
         void test() {
+            s_nThreadIncrementCount = s_nIncrementCount / s_nThreadCount;
+            s_nIncrementCount = s_nThreadIncrementCount * s_nThreadCount;
+
             cds_test::thread_pool &pool = get_pool();
 
             typename IncrementPolicy::counter_type nTotal{0};
@@ -90,6 +94,7 @@ namespace {
 
     size_t counter_inc::s_nThreadCount = 4;
     size_t counter_inc::s_nIncrementCount = 100000;
+    size_t counter_inc::s_nThreadIncrementCount = 100000 / 4;
 
     static void spin(size_t n, std::true_type) { for(volatile size_t i = 0; i < n; ++i) {} }
     static void spin(size_t, std::false_type) { }
