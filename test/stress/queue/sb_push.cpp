@@ -13,6 +13,8 @@
 #include <cds/container/sb_block_basket_queue.h>
 #include <cds/container/bags.h>
 
+#include <cds/details/system_timer.h>
+
 #include <cds_test/check_baskets.h>
 
 namespace cds_test {
@@ -153,9 +155,16 @@ namespace {
 
             pool.add( new Producer<Queue>( pool, q, s_nThreadPushCount), s_nThreadCount );
 
-            std::chrono::milliseconds duration = pool.run();
+            cds::details::SystemTimer timer;
 
-            propout() << std::make_pair( "duration", duration );
+            timer.start();
+            std::chrono::milliseconds duration = pool.run();
+            auto times = timer.stop();
+
+            propout() << std::make_pair( "duration", duration )
+               << std::make_pair( "clock_time", times.clock )
+               << std::make_pair( "system_time", times.sys )
+               << std::make_pair( "user_time", times.user );
 
             struct record {
               size_t writer_id;
