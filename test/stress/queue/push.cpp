@@ -95,7 +95,7 @@ namespace {
             if ( s_nQueueSize == 0u )
                 s_nQueueSize = 1000;
 
-            s_Topology.emplace(s_nThreadCount);
+            s_Topology = Topology(s_nThreadCount);
         }
 
         //static void TearDownTestCase();
