@@ -8,6 +8,8 @@
 #include <algorithm>
 #include <unordered_map>
 
+#include <boost/optional.hpp>
+
 #include <cds/container/sb_basket_queue.h>
 #include <cds/container/wf_queue.h>
 #include <cds/container/sb_block_basket_queue.h>
@@ -16,6 +18,7 @@
 #include <cds/details/system_timer.h>
 
 #include <cds_test/check_baskets.h>
+#include <cds_test/topology.h>
 
 namespace cds_test {
 
@@ -38,8 +41,10 @@ namespace cds_test {
 
 // Multi-threaded random queue test
 namespace {
+    using cds_test::utils::topology::Topology;
     static size_t s_nThreadCount = 8;
     static size_t s_nQueueSize = 20000000 ;   // no more than 20 million records
+    static boost::optional<Topology> s_Topology;
 
     static atomics::atomic< size_t > s_nProducerCount(0);
     static size_t s_nThreadPushCount;
@@ -58,14 +63,16 @@ namespace {
             typedef cds_test::thread base_class;
 
         public:
-            Producer( cds_test::thread_pool& pool, Queue& q, size_t count)
+            Producer( cds_test::thread_pool& pool, Queue& q, const Topology& topology, size_t count)
                 : base_class(pool)
                 , m_Queue( q )
+                , m_Topology(topology)
                 , m_count(count)
             {}
             Producer( Producer& src )
                 : base_class( src )
                 , m_Queue( src.m_Queue )
+                , m_Topology( src.m_Topology )
                 , m_count( src.m_count)
             {}
 
@@ -79,6 +86,7 @@ namespace {
                 using value_type = typename Queue::value_type;
                 size_t i = 1;
                 const auto id_ = id();
+                m_Topology.pin_thread(id_);
                 while ( i <= m_count ) {
                     if ( m_Queue.push(value_type{id_, i}, id_)) {
                         ++i;
@@ -87,10 +95,12 @@ namespace {
                         ++m_nPushFailed;
                 }
                 s_nProducerCount.fetch_sub( 1, atomics::memory_order_release );
+                m_Topology.verify_pin(id_);
             }
 
         public:
             Queue&              m_Queue;
+            const Topology& m_Topology;
             size_t              m_nPushFailed = 0;
 
             size_t m_count;
@@ -109,6 +119,8 @@ namespace {
                 s_nThreadCount = 1;
             if ( s_nQueueSize == 0u )
                 s_nQueueSize = 1000;
+
+            s_Topology.emplace(s_nThreadCount);
         }
 
 
@@ -153,7 +165,7 @@ namespace {
 
             cds_test::thread_pool& pool = get_pool();
 
-            pool.add( new Producer<Queue>( pool, q, s_nThreadPushCount), s_nThreadCount );
+            pool.add( new Producer<Queue>( pool, q, *s_Topology, s_nThreadPushCount), s_nThreadCount );
 
             cds::details::SystemTimer timer;
 

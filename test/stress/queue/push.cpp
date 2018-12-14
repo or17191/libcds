@@ -5,13 +5,19 @@
 
 #include "queue_type.h"
 
+#include <boost/optional.hpp>
+
+#include <cds_test/topology.h>
+
 #include <cds/details/system_timer.h>
 
 // Multi-threaded queue test for push operation
 namespace {
+    using cds_test::utils::topology::Topology;
 
     static size_t s_nThreadCount = 8;
     static size_t s_nQueueSize = 20000000 ;   // no more than 20 million records
+    static boost::optional<Topology> s_Topology;
 
     class queue_push: public cds_test::stress_fixture
     {
@@ -35,9 +41,10 @@ namespace {
             typedef cds_test::thread base_class;
 
         public:
-            Producer( cds_test::thread_pool& pool, Queue& queue )
+            Producer( cds_test::thread_pool& pool, Queue& queue, const Topology& topology )
                 : base_class( pool )
                 , m_Queue( queue )
+                , m_Topology( topology )
                 , m_nStartItem( 0 )
                 , m_nEndItem( 0 )
                 , m_nPushError( 0 )
@@ -46,6 +53,7 @@ namespace {
             Producer( Producer& src )
                 : base_class( src )
                 , m_Queue( src.m_Queue )
+                , m_Topology( src.m_Topology )
                 , m_nStartItem( 0 )
                 , m_nEndItem( 0 )
                 , m_nPushError( 0 )
@@ -58,14 +66,17 @@ namespace {
 
             virtual void test()
             {
+                m_Topology.pin_thread(id());
                 for ( size_t nItem = m_nStartItem; nItem < m_nEndItem; ++nItem ) {
                     if ( !m_Queue.push( nItem ))
                         ++m_nPushError;
                 }
+                m_Topology.verify_pin(id());
             }
 
         public:
             Queue&              m_Queue;
+            const Topology&     m_Topology;
             size_t              m_nStartItem;
             size_t              m_nEndItem;
             size_t              m_nPushError;
@@ -83,6 +94,8 @@ namespace {
                 s_nThreadCount = 1;
             if ( s_nQueueSize == 0u )
                 s_nQueueSize = 1000;
+
+            s_Topology.emplace(s_nThreadCount);
         }
 
         //static void TearDownTestCase();
@@ -93,7 +106,7 @@ namespace {
         {
             cds_test::thread_pool& pool = get_pool();
 
-            pool.add( new Producer<Queue>( pool, q ), s_nThreadCount );
+            pool.add( new Producer<Queue>( pool, q, *s_Topology ), s_nThreadCount );
 
             size_t nStart = 0;
             size_t nThreadItemCount = s_nQueueSize / s_nThreadCount;

@@ -8,14 +8,19 @@
 #include <algorithm>
 #include <unordered_map>
 
+#include <boost/optional.hpp>
+
 #include <cds_test/check_baskets.h>
+#include <cds_test/topology.h>
 
 #include <cds/details/system_timer.h>
 
 // Multi-threaded random queue test
 namespace {
+    using cds_test::utils::topology::Topology;
     static size_t s_nThreadCount = 8;
     static size_t s_nQueueSize = 20000000 ;   // no more than 20 million records
+    static boost::optional<Topology> s_Topology;
 
     static atomics::atomic< size_t > s_nProducerCount(0);
     static size_t s_nThreadPushCount;
@@ -42,13 +47,15 @@ namespace {
             typedef cds_test::thread base_class;
 
         public:
-            Producer( cds_test::thread_pool& pool, Queue& q )
+            Producer( cds_test::thread_pool& pool, Queue& q, const Topology& topology )
                 : base_class(pool)
                 , m_Queue( q )
+                , m_Topology( topology )
             {}
             Producer( Producer& src )
                 : base_class( src )
                 , m_Queue( src.m_Queue )
+                , m_Topology( src.m_Topology )
             {}
 
             virtual thread * clone()
@@ -58,10 +65,12 @@ namespace {
 
             virtual void test()
             {
+                auto id_ = id();
+                m_Topology.pin_thread(id_);
                 size_t i = 0;
                 for ( typename Queue::value_type * p = m_pStart; p < m_pEnd; ) {
                     p->nNo = i;
-                    p->nWriterNo = id();
+                    p->nWriterNo = id_;
                     CDS_TSAN_ANNOTATE_HAPPENS_BEFORE( &p->nWriterNo );
                     if ( m_Queue.push( *p )) {
                         ++p;
@@ -75,6 +84,7 @@ namespace {
 
         public:
             Queue&              m_Queue;
+            const Topology & m_Topology;
             size_t              m_nPushFailed = 0;
 
             // Interval in m_arrValue
@@ -106,6 +116,8 @@ namespace {
                 s_nThreadCount = 1;
             if ( s_nQueueSize == 0u )
                 s_nQueueSize = 1000;
+
+            s_Topology.emplace(s_nThreadCount);
         }
 
 
@@ -140,7 +152,7 @@ namespace {
             typename Queue::value_type * pValStart = arrValue.get();
             typename Queue::value_type * pValEnd = pValStart + s_nQueueSize;
 
-            pool.add( new Producer<Queue>( pool, q ), s_nThreadCount );
+            pool.add( new Producer<Queue>( pool, q, *s_Topology ), s_nThreadCount );
             {
                 for ( typename Queue::value_type * it = pValStart; it != pValEnd; ++it ) {
                     it->nNo = 0;
