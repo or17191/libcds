@@ -10,6 +10,8 @@
 
 #include <cds_test/check_baskets.h>
 
+#include <cds/details/system_timer.h>
+
 // Multi-threaded random queue test
 namespace {
     static size_t s_nThreadCount = 8;
@@ -155,9 +157,15 @@ namespace {
                 }
             }
 
+            cds::details::SystemTimer timer;
+            timer.start();
             std::chrono::milliseconds duration = pool.run();
+            auto times = timer.stop();
 
-            propout() << std::make_pair( "duration", duration );
+            propout() << std::make_pair( "duration", duration ) 
+              << std::make_pair("clock_time", times.clock)
+              << std::make_pair("system_time", times.sys)
+              << std::make_pair("user_time", times.user);
 
             analyze( q, pValStart, pValStart);
 
