@@ -5,6 +5,8 @@
 
 #include "queue_type.h"
 
+#include <cds/details/system_timer.h>
+
 // Multi-threaded queue test for push operation
 namespace {
 
@@ -106,9 +108,17 @@ namespace {
             propout() << std::make_pair( "thread_count", s_nThreadCount )
                 << std::make_pair( "push_count", s_nQueueSize );
 
-            std::chrono::milliseconds duration = pool.run();
+            cds::details::SystemTimer timer;
 
-            propout() << std::make_pair( "duration", duration );
+            timer.start();
+            std::chrono::milliseconds duration = pool.run();
+            auto times = timer.stop();
+
+            propout() << std::make_pair( "duration", duration )
+               << std::make_pair( "clock_time", times.clock )
+               << std::make_pair( "system_time", times.sys )
+               << std::make_pair( "user_time", times.user );
+
 
             analyze( q );
 
