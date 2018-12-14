@@ -5,6 +5,7 @@ set(CDSSTRESS_FRAMEWORK_SOURCES
     framework/config.cpp
     framework/ellen_bintree_update_desc_pool.cpp
     framework/stress_test.cpp
+    framework/topology.cpp
 )
 
 add_custom_command(
