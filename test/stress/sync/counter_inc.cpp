@@ -7,13 +7,21 @@
 
 #include <cds/sync/htm.h>
 #include <cds/algo/atomic.h>
+#include <boost/optional.hpp>
+
+#include <cds_test/topology.h>
 
 namespace {
+    inline static void spin(size_t n, std::true_type) { for(volatile size_t i = 0; i < n; ++i) {} }
+    inline static void spin(size_t, std::false_type) { }
+
+    using cds_test::utils::topology::Topology;
     class counter_inc : public cds_test::stress_fixture {
       protected:
         static size_t s_nThreadCount;
         static size_t s_nIncrementCount;
         static size_t s_nThreadIncrementCount;
+        static boost::optional<Topology> s_Topology;
 
         template <class IncrementPolicy>
         class Worker : public cds_test::thread {
@@ -21,24 +29,30 @@ namespace {
             typedef typename IncrementPolicy::counter_type counter_type;
 
             counter_type &m_counter;
+            const Topology& m_Topology;
 
           public:
             size_t m_nSuccess = 0;
 
           public:
-            Worker(cds_test::thread_pool &pool, counter_type &s, int type = 0)
-                : base_class(pool, type), m_counter(s) {}
+            Worker(cds_test::thread_pool &pool, counter_type &s,
+                  const Topology& topology, int type = 0)
+                : base_class(pool, type), m_counter(s), m_Topology(topology) {}
 
-            Worker(Worker &src) : base_class(src), m_counter(src.m_counter) {}
+            Worker(Worker &src) : base_class(src), m_counter(src.m_counter),
+                m_Topology(src.m_Topology) {}
 
             virtual thread *clone() { return new Worker(*this); }
 
             virtual void test() {
+                m_Topology.pin_thread(id());
                 auto& counter=m_counter;
                 for (size_t pass = 0; pass < s_nThreadIncrementCount; ++pass) {
                     auto res = IncrementPolicy::_(counter);
                     m_nSuccess += static_cast<bool>(res);
+                    spin(1000, std::true_type{});
                 }
+                m_Topology.verify_pin(id());
             }
         };
 
@@ -54,6 +68,8 @@ namespace {
                 s_nThreadCount = 1;
             if (s_nIncrementCount == 0)
                 s_nIncrementCount = 1000;
+
+            s_Topology = Topology(s_nThreadCount);
         }
         // static void TearDownTestCase();
 
@@ -68,7 +84,7 @@ namespace {
             typename IncrementPolicy::counter_type nTotal{0};
             typedef Worker<IncrementPolicy> worker_type;
 
-            pool.add(new worker_type(pool, nTotal), s_nThreadCount);
+            pool.add(new worker_type(pool, nTotal, *s_Topology), s_nThreadCount);
 
             propout() << std::make_pair("work_thread", s_nThreadCount)
                       << std::make_pair("increment_count", s_nIncrementCount);
@@ -95,9 +111,7 @@ namespace {
     size_t counter_inc::s_nThreadCount = 4;
     size_t counter_inc::s_nIncrementCount = 100000;
     size_t counter_inc::s_nThreadIncrementCount = 100000 / 4;
-
-    static void spin(size_t n, std::true_type) { for(volatile size_t i = 0; i < n; ++i) {} }
-    static void spin(size_t, std::false_type) { }
+    boost::optional<Topology> counter_inc::s_Topology{};
 
     template <class Delay>
     struct HTMPolicy {
@@ -135,10 +149,10 @@ namespace {
     };
 
 #ifdef CDS_HTM_SUPPORT
-    TEST_F(counter_inc, htm) { test<HTMPolicy<std::true_type>>(); }
-    TEST_F(counter_inc, cas) { test<CASPolicy<std::true_type>>(); }
-    TEST_F(counter_inc, faa) { test<FAAPolicy<std::true_type>>(); }
+    TEST_F(counter_inc, htm) { test<HTMPolicy<std::false_type>>(); }
 #endif // CDS_HTM_SUPPORT
+    TEST_F(counter_inc, cas) { test<CASPolicy<std::false_type>>(); }
+    TEST_F(counter_inc, faa) { test<FAAPolicy<std::false_type>>(); }
 
     class dual_counter_inc : public counter_inc {
       protected:
@@ -156,8 +170,8 @@ namespace {
 
             typename atomics::atomic_size_t nTotal{0};
 
-            pool.add(new Worker<CASPolicy<std::false_type>>(pool, nTotal), s_nThreadCount / 2);
-            pool.add(new Worker<HTMPolicy<std::false_type>>(pool, nTotal), s_nThreadCount / 2);
+            pool.add(new Worker<CASPolicy<std::false_type>>(pool, nTotal, *s_Topology), s_nThreadCount / 2);
+            pool.add(new Worker<HTMPolicy<std::false_type>>(pool, nTotal, *s_Topology), s_nThreadCount / 2);
 
             propout() << std::make_pair("work_thread", s_nThreadCount)
                       << std::make_pair("increment_count", s_nIncrementCount);
