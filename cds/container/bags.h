@@ -6,9 +6,12 @@
 
 #include <cds/algo/atomic.h>
 #include <cds/container/treiber_stack.h>
+#include <cds/details/memkind_allocator.h>
 #include <cds/gc/hp.h>
 
 namespace cds { namespace container {
+  using cds::details::memkind_array;
+  using cds::details::MemkindUniquePtr;
     namespace bags {
         template <class T>
         struct PaddedValue
@@ -24,11 +27,11 @@ namespace cds { namespace container {
             using value_type = PaddedValue<T>;
             atomics::atomic_int m_counter;
             char pad2_[cds::c_nCacheLineSize - sizeof(m_counter)];
-            std::unique_ptr<value_type[]> m_bag;
+            MemkindUniquePtr<value_type> m_bag;
             size_t m_size;
 
         public:
-            SimpleBag(size_t ids) : m_bag(new value_type[ids]()), m_counter(0), m_size(ids) {}
+            SimpleBag(size_t ids) : m_bag(memkind_array<value_type>(ids)), m_counter(0), m_size(ids) {}
             bool insert(T &t, size_t /*id*/)
             {
                 auto idx = m_counter.fetch_add(1, atomics::memory_order_relaxed);
@@ -66,11 +69,11 @@ namespace cds { namespace container {
                 bool flag;
             };
             using value_type = PaddedValue<value>;
-            std::unique_ptr<value_type[]> m_bag;
+            MemkindUniquePtr<value_type> m_bag;
             size_t m_size;
 
         public:
-            IdBag(size_t ids) : m_bag(new value_type[ids]()), m_size(ids)
+            IdBag(size_t ids) : m_bag(memkind_array<value_type>(ids)), m_size(ids)
             {
                 for (size_t i = 0; i < m_size; ++i) {
                     m_bag[i].value.flag = false;
@@ -113,7 +116,11 @@ namespace cds { namespace container {
         class StackBag
         {
         private:
-            TreiberStack<cds::gc::HP, T> m_bag;
+
+            struct inner_traits : treiber_stack::traits {
+              using allocator = cds::details::memkind_allocator<T>;
+            };
+            TreiberStack<cds::gc::HP, T, inner_traits> m_bag;
 
         public:
             StackBag(size_t /*ids*/) {}

@@ -11,6 +11,7 @@
 
 #include <cds/container/details/base.h>
 #include <cds/details/marked_ptr.h>
+#include <cds/details/memkind_allocator.h>
 
 namespace cds { namespace container {
 
@@ -79,8 +80,8 @@ namespace cds { namespace container {
         struct traits
         {
             /// Node allocator
-            typedef CDS_DEFAULT_ALLOCATOR       node_allocator;
-            typedef CDS_DEFAULT_ALLOCATOR       value_allocator;
+            typedef cds::details::memkind_allocator<int>       node_allocator;
+            typedef cds::details::memkind_allocator<int>       value_allocator;
 
             /// Back-off strategy
             typedef cds::backoff::empty         back_off;

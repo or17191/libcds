@@ -83,6 +83,14 @@ if(WITH_TESTS_COVERAGE)
     endif()
 endif(WITH_TESTS_COVERAGE)
 
+## MEMKIND
+
+find_library(MEMKIND_LIBS memkind PATHS "${CMAKE_SOURCE_DIR}/../memkind_root/usr/local/lib")
+link_libraries(${MEMKIND_LIBS})
+include_directories("${CMAKE_SOURCE_DIR}/../memkind_root/usr/local/include")
+
+## END MEMKIND
+
 set(CDS_SHARED_LIBRARY ${PROJECT_NAME})
 set(CDS_STATIC_LIBRARY ${PROJECT_NAME}-s)
 
