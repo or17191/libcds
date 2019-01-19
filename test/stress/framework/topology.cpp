@@ -137,6 +137,15 @@ namespace topology {
         }
     }
 
+    std::ostream& operator<<(std::ostream& os, const Topology& topology) {
+      os << '{';
+      auto& mapping = topology.mapping();
+      for(size_t i = 0; i < mapping.size(); ++i) {
+        os << i << ':' << mapping[i].physical << ',';
+      }
+      os << '}' << std::endl;
+    }
+
 }
 }
 } // namespace cds_test::utils::topology

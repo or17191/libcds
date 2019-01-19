@@ -102,6 +102,8 @@ namespace {
             std::cout << "[ STAT     ] IncrementCount = " << s_nIncrementCount << std::endl;
 
             s_Topology = Topology(s_nThreadCount);
+
+            std::cout << "[ STAT     ] Topology = " << *s_Topology << std::endl;
         }
         // static void TearDownTestCase();
 

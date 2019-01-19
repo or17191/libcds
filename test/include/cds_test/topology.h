@@ -65,6 +65,8 @@ namespace topology {
         node_info_type m_node_info;
     };
 
+    std::ostream& operator<<(std::ostream& os, const Topology&);
+
 }
 }
 } // namespace cds_test::utils::topology
