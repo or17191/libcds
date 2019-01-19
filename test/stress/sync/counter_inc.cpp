@@ -6,6 +6,7 @@
 #include <cds_test/stress_test.h>
 
 #include <map>
+#include <chrono>
 
 #include <cds/sync/htm.h>
 #include <cds/algo/atomic.h>
@@ -56,6 +57,7 @@ namespace {
           public:
             intmax_t m_nSuccess = 0;
             bool m_good = true;
+            std::chrono::nanoseconds m_duration{0};
 
           public:
             Worker(cds_test::thread_pool &pool, counter_type &s, IncrementPolicy& increment,
@@ -71,16 +73,20 @@ namespace {
                 auto id_ = id();
                 m_Topology.pin_thread(id_);
                 auto& counter=m_counter;
+                using clock_type = std::chrono::high_resolution_clock;
+                auto start = clock_type::now();
                 for (size_t pass = 0; pass < s_nThreadIncrementCount; ++pass) {
-                    auto tmp = counter.load(atomics::memory_order_acquire);
+                    //auto tmp = counter.load(atomics::memory_order_acquire);
                     auto res = m_increment(counter, id_);
-                    auto tmp2 = counter.load(atomics::memory_order_release);
-                    if (!(tmp < tmp2)) {
-                      m_good = false;
-                    }
+                    //auto tmp2 = counter.load(atomics::memory_order_release);
+                    //if (!(tmp < tmp2)) {
+                    //  m_good = false;
+                    //}
                     m_nSuccess += static_cast<bool>(res);
                     spin(1000, std::true_type{});
                 }
+                auto end = clock_type::now();
+                m_duration = end - start;
                 m_Topology.verify_pin(id_);
             }
         };
@@ -115,7 +121,6 @@ namespace {
             // s_nThreadIncrementCount = s_nIncrementCount / s_nThreadCount;
             // s_nIncrementCount = s_nThreadIncrementCount * s_nThreadCount;
             s_nThreadIncrementCount = s_nIncrementCount;
-            s_nIncrementCount = s_nThreadIncrementCount;
 
             cds_test::thread_pool &pool = get_pool();
 
@@ -148,18 +153,26 @@ namespace {
 
             size_t nSuccess = 0;
             bool passed = true;
+            std::chrono::nanoseconds ns{0};
             for (size_t threadNo = 0; threadNo < pool.size(); ++threadNo) {
               auto& thread = static_cast<worker_type &>(pool.get(threadNo));
               EXPECT_TRUE(thread.m_good);
               passed = passed && thread.m_good;
               nSuccess += thread.m_nSuccess;
+              ns += thread.m_duration;
             }
+
+            double internal = static_cast<double>(ns.count())/s_nIncrementCount/s_nThreadCount;
+            double external = static_cast<double>(duration.count() * 1000) / s_nIncrementCount;
+
+            std::cout << "[ STAT     ] internal = " << internal << " external = " << external << std::endl;
 
             EXPECT_EQ(nSuccess, nTotal);
             EXPECT_NE(0, nTotal);
 
             propout() << std::make_pair("all_consistent", passed);
             propout() << std::make_pair("thread_counter", nSuccess);
+            propout() << std::make_pair("ns", internal);
         }
     };
 
