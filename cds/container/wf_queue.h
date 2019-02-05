@@ -262,7 +262,7 @@ namespace cds { namespace container {
     template <typename GC, typename T, typename Traits = wf_queue::traits>
     class WFQueue : details::make_wf_queue<GC, T, Traits>
     {
-    private:
+    protected:
         typedef typename details::make_wf_queue<GC, T, Traits> maker;
     public:
         /// Rebind template arguments
@@ -483,7 +483,7 @@ namespace cds { namespace container {
             return m_Stat;
         }
 
-    private:
+    protected:
         id_t enq_fast(handle_type& handle, scoped_value_ptr& val) {
           auto i = Ei.fetch_add(1, memory_model::memory_order_seq_cst);
           auto cell = find_cell(handle.Ep, i, handle);
@@ -783,6 +783,59 @@ namespace cds { namespace container {
         }
     };
 
+    template <typename GC, typename T, typename Traits = wf_queue::traits>
+    class CrippledWFQueue : public WFQueue<GC, T, Traits>
+    {
+        using base_type = WFQueue<GC, T, Traits>;
+        using handle_type = typename base_type::handle_type;
+        using memory_model = typename base_type::memory_model;
+        using scoped_value_ptr = typename base_type::scoped_value_ptr;
+        using value_ptr = typename base_type::value_ptr;
+        using maker = typename base_type::maker;
+
+        id_t enq_fast(handle_type& handle, scoped_value_ptr& val) {
+          base_type::Ei.load(memory_model::memory_order_acquire); // Simulate cost of CAS
+          auto i = base_type::Ei.fetch_add(1, memory_model::memory_order_seq_cst);
+          auto cell = base_type::find_cell(handle.Ep, i, handle);
+          auto cv = maker::template bot<value_ptr>();
+          if (cell->val.compare_exchange_strong(cv, value_ptr(val.get()))) {
+            val.release();
+            base_type::m_Stat.onFastEnqueue();
+            return -1;
+          } else {
+            return i;
+          }
+        }
+        public:
+        using base_type::base_type;
+        template <class Arg>
+        bool enqueue(Arg &&val, size_t tid)
+        {
+            scoped_value_ptr value{typename maker::value_cxx_allocator().MoveNew(std::forward<Arg>(val))};
+            auto& handle = base_type::m_handle[tid];
+            handle.hzd_node_id.store(handle.enq_node_id, memory_model::memory_order_acquire);
+            id_t id;
+            for(size_t i = 0; i < base_type::traits::max_patience; ++i) {
+              id = enq_fast(handle, value);
+              if (id < 0) {
+                break; 
+              }
+            }
+            if(id >= 0) {
+              base_type::enq_slow(handle, value, id);
+            }
+            handle.enq_node_id = handle.Ep.load(memory_model::memory_order_relaxed)->id;
+            handle.hzd_node_id.store(-1, memory_model::memory_order_release);
+            ++base_type::m_ItemCounter;
+            return true;
+        }
+        template <class... Args>
+        bool push(Args &&... args)
+        {
+            return enqueue(std::forward<Args>(args)...);
+        }
+
+    };
     
 
 }} // namespace cds::container

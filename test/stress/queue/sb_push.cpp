@@ -121,6 +121,13 @@ namespace {
                 s_nQueueSize = 1000;
 
             s_Topology = Topology(s_nThreadCount);
+
+            std::cout << "[ STAT     ] ThreadCount = " << s_nThreadCount << std::endl;
+            std::cout << "[ STAT     ] QueueSize = " << s_nQueueSize << std::endl;
+
+            s_Topology = Topology(s_nThreadCount);
+
+            std::cout << "[ STAT     ] Topology = " << *s_Topology << std::endl;
         }
 
 
@@ -279,6 +286,9 @@ namespace {
 
     using WFQueue = cds::container::WFQueue<gc_type, value_type>;
     CDSSTRESS_QUEUE_F( WFQueue, std::false_type )
+
+    using CrippledWFQueue = cds::container::CrippledWFQueue<gc_type, value_type>;
+    CDSSTRESS_QUEUE_F( CrippledWFQueue, std::false_type )
 
     struct stat_wf_queue : public cds::container::wf_queue::traits {
       typedef cds::container::wf_queue::stat<> stat;
