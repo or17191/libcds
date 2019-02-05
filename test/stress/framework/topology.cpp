@@ -6,10 +6,12 @@
 #include <sstream>
 #include <stdexcept>
 #include <string>
+#include <algorithm>
 
 #include <sched.h>
 #include <sys/stat.h>
 #include <sys/types.h>
+#include <stdlib.h>
 
 extern "C" {
 static int is_directory(char const *const path)
@@ -93,6 +95,19 @@ namespace topology {
 
     void Topology::make_mapping()
     {
+        bool packed = getenv("PACKED") != nullptr;
+        bool spread = getenv("SPREAD") != nullptr;
+        bool numa = getenv("NUMA") != nullptr;
+        if (!packed && !spread) {
+          make_default_mapping();
+          return;
+        }
+        assert(packed != spread);
+        make_specific_mapping(packed, numa);
+    }
+
+    void Topology::make_default_mapping()
+    {
         std::size_t sockets = 0;
         std::size_t populus = 0;
         // Take the smallest amount of sockets.
@@ -121,8 +136,48 @@ namespace topology {
         }
     }
 
+    void Topology::make_specific_mapping(bool packed, bool numa)
+    {
+      size_t sockets = numa ? m_info.size() : 1;
+      auto info_pos = m_info.begin();
+      for(size_t s = 0; s < sockets; ++s, ++info_pos) {
+        size_t core = 0;
+        auto& socket = info_pos->second;
+        for(auto socket_pos = socket.begin(); socket_pos != socket.end(); ++core, ++socket_pos) {
+          for(auto& physical: socket_pos->second) {
+            m_mapping.emplace_back(core, info_pos->first, physical);
+          }
+        }
+      }
+      if (m_threads_num > m_mapping.size()) {
+          std::ostringstream err;
+          err << "Too many threads. For this amount of sockets, use " << m_mapping.size() << " threads.";
+          throw std::runtime_error(err.str());
+      }
+      // Sorts by (hypercore, logical core, socket)
+      std::sort(m_mapping.begin(), m_mapping.end(), [](const core_id& lhs, const core_id& rhs) {
+        return std::less<size_t>{}(lhs.physical, rhs.physical);
+      });
+      if(packed) {
+        // Sorts by (logical core, hypercore, socket)
+        std::stable_sort(m_mapping.begin(), m_mapping.end(), [](const core_id& lhs, const core_id& rhs) {
+          return std::less<size_t>{}(lhs.logical, rhs.logical);
+        });
+      }
+      m_mapping.erase(std::next(m_mapping.begin(), m_threads_num), m_mapping.end());
+      m_node_info.resize(sockets);
+      std::fill_n(m_node_info.begin(), sockets, 0);
+      for(auto& c: m_mapping) {
+        m_node_info[c.socket]++;
+      }
+    }
+
     void Topology::pin_thread(std::size_t thread_num) const
     {
+        if (thread_num >= m_mapping.size()) {
+            std::cerr << "Invalid tid " << thread_num;
+            return;
+        }
         cpu_set_t cpu_set;
         CPU_ZERO(&cpu_set);
         CPU_SET(mapping()[thread_num].physical, &cpu_set);
@@ -143,7 +198,7 @@ namespace topology {
       for(size_t i = 0; i < mapping.size(); ++i) {
         os << i << ':' << mapping[i].physical << ',';
       }
-      os << '}' << std::endl;
+      os << '}';
     }
 
 }
