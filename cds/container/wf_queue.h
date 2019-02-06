@@ -77,6 +77,13 @@ namespace cds { namespace container {
             //@endcond
         };
 
+        struct default_cell_getter {
+          template <class Atomic>
+          static id_t _(Atomic& idx, size_t tid, size_t nprocs) {
+            return idx.fetch_add(1, std::memory_order_seq_cst);
+          }
+        };
+
         struct traits
         {
             /// Node allocator
@@ -114,6 +121,8 @@ namespace cds { namespace container {
             struct max_grabage {
               size_t operator()(size_t n) const { return n * 2; }
             };
+
+            typedef default_cell_getter cell_getter;
         };
 
         template <typename... Options>
@@ -385,7 +394,7 @@ namespace cds { namespace container {
             handle.hzd_node_id.store(handle.enq_node_id, memory_model::memory_order_acquire);
             id_t id;
             for(size_t i = 0; i < traits::max_patience; ++i) {
-              id = enq_fast(handle, value);
+              id = enq_fast(handle, value, tid);
               if (id < 0) {
                 break; 
               }
@@ -484,8 +493,8 @@ namespace cds { namespace container {
         }
 
     protected:
-        id_t enq_fast(handle_type& handle, scoped_value_ptr& val) {
-          auto i = Ei.fetch_add(1, memory_model::memory_order_seq_cst);
+        id_t enq_fast(handle_type& handle, scoped_value_ptr& val, size_t tid) {
+          auto i = traits::cell_getter::_(Ei, tid, nprocs);
           auto cell = find_cell(handle.Ep, i, handle);
           auto cv = maker::template bot<value_ptr>();
           if (cell->val.compare_exchange_strong(cv, value_ptr(val.get()))) {
@@ -507,6 +516,7 @@ namespace cds { namespace container {
               if (!tmp) {
                 handle.spare.reset(alloc_node());
                 tmp = handle.spare.get();
+                assert(tmp);
               }
               tmp->id = j + 1;
               if(curr->next.compare_exchange_strong(next, node_ptr(tmp), memory_model::memory_order_release,
@@ -783,57 +793,103 @@ namespace cds { namespace container {
         }
     };
 
-    template <typename GC, typename T, typename Traits = wf_queue::traits>
+    namespace wf_queue {
+      struct crippled_cell_getter {
+        template <class Atomic>
+        static id_t _(Atomic& idx, size_t tid, size_t nprocs) {
+          idx.load(std::memory_order_acquire); // Simulate the cost of CAS
+          return idx.fetch_add(1, std::memory_order_seq_cst);
+        }
+      };
+
+      struct crippled_traits : traits {
+        typedef crippled_cell_getter cell_getter;
+      };
+    }
+
+    template <typename GC, typename T, typename Traits = wf_queue::crippled_traits>
     class CrippledWFQueue : public WFQueue<GC, T, Traits>
     {
         using base_type = WFQueue<GC, T, Traits>;
+        static_assert(std::is_same<typename base_type::traits, wf_queue::crippled_traits>::value, "");
+        using base_type::base_type;
+    };
+
+    namespace wf_queue {
+      struct basket_cell_getter {
+          static void delay(size_t s) {
+            volatile int x;
+            for(size_t i = 0; i < s; ++i) {
+              x = 0;
+            }
+          }
+
+        template <class Atomic>
+        static id_t _(Atomic& idx, size_t tid, size_t nprocs) {
+          auto tmp = idx.load(std::memory_order_acquire);
+          auto i = tmp + tid; 
+          delay(20 * nprocs);
+          idx.compare_exchange_strong(tmp, tmp + nprocs, std::memory_order_seq_cst);
+          return i;
+        }
+      };
+
+      struct basket_traits : traits {
+        typedef crippled_cell_getter cell_getter;
+      };
+    }
+
+    template <typename GC, typename T, typename Traits = wf_queue::basket_traits>
+    class BasketWFQueue : public WFQueue<GC, T, Traits>
+    {
+        using base_type = WFQueue<GC, T, Traits>;
+        static_assert(std::is_same<typename base_type::traits, wf_queue::basket_traits>::value, "");
         using handle_type = typename base_type::handle_type;
         using memory_model = typename base_type::memory_model;
         using scoped_value_ptr = typename base_type::scoped_value_ptr;
         using value_ptr = typename base_type::value_ptr;
         using maker = typename base_type::maker;
 
-        id_t enq_fast(handle_type& handle, scoped_value_ptr& val) {
-          base_type::Ei.load(memory_model::memory_order_acquire); // Simulate cost of CAS
-          auto i = base_type::Ei.fetch_add(1, memory_model::memory_order_seq_cst);
-          auto cell = base_type::find_cell(handle.Ep, i, handle);
-          auto cv = maker::template bot<value_ptr>();
-          if (cell->val.compare_exchange_strong(cv, value_ptr(val.get()))) {
-            val.release();
-            base_type::m_Stat.onFastEnqueue();
-            return -1;
-          } else {
-            return i;
-          }
-        }
         public:
         using base_type::base_type;
-        template <class Arg>
-        bool enqueue(Arg &&val, size_t tid)
-        {
-            scoped_value_ptr value{typename maker::value_cxx_allocator().MoveNew(std::forward<Arg>(val))};
-            auto& handle = base_type::m_handle[tid];
-            handle.hzd_node_id.store(handle.enq_node_id, memory_model::memory_order_acquire);
-            id_t id;
-            for(size_t i = 0; i < base_type::traits::max_patience; ++i) {
-              id = enq_fast(handle, value);
-              if (id < 0) {
-                break; 
-              }
+        /// Synonym for \p dequeue() function
+       bool dequeue(typename base_type::value_type& dest, size_t tid) {
+          auto& handle = base_type::m_handle[tid];
+          handle.hzd_node_id.store(handle.deq_node_id, memory_model::memory_order_acquire);
+
+          value_ptr v;
+          while(true) {
+            auto i = base_type::Di.fetch_add(1, memory_model::memory_order_seq_cst);
+            auto cell = base_type::find_cell(handle.Dp, i, handle);
+            v = cell->val.exchange(maker::template top<value_ptr>(), memory_model::memory_order_seq_cst);
+            if(!maker::is_bot(v) || i >= base_type::Ei.load(memory_model::memory_order_seq_cst)) {
+              assert(!maker::is_top(v));
+              break;
             }
-            if(id >= 0) {
-              base_type::enq_slow(handle, value, id);
-            }
-            handle.enq_node_id = handle.Ep.load(memory_model::memory_order_relaxed)->id;
-            handle.hzd_node_id.store(-1, memory_model::memory_order_release);
-            ++base_type::m_ItemCounter;
+          }
+          handle.deq_node_id = handle.Dp.load(memory_model::memory_order_relaxed)->id;
+          handle.hzd_node_id.store(-1, memory_model::memory_order_release);
+         
+          if (!handle.spare) {
+            base_type::cleanup(handle);
+            handle.spare.reset(base_type::alloc_node());
+          }
+          if (maker::is_bot(v)) {
+            return false;
+          } else {
+            std::swap(dest, *v.ptr());
+            typename maker::value_deallocator{}(v.ptr());
+            --base_type::m_ItemCounter;
             return true;
+          }
+          
         }
         template <class... Args>
-        bool push(Args &&... args)
+        bool pop(Args &&... args)
         {
-            return enqueue(std::forward<Args>(args)...);
+            return dequeue(std::forward<Args>(args)...);
         }
+
 
     };
     

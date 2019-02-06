@@ -186,26 +186,27 @@ namespace {
                << std::make_pair( "user_time", times.user );
 
             struct record {
-              size_t writer_id;
-              size_t number;
+              intmax_t writer_id;
+              intmax_t number;
               cds::uuid_type basket_id;
             };
 
             std::vector<record> values;
             values.reserve(s_nQueueSize);
             int pops = 0;
-            std::pair<size_t, size_t> value;
+            typename Queue::value_type value{-1, -1};
             cds::uuid_type basket = 0;
             while(pop(q, value, 0, basket, HasBaskets{})) {
               ++pops;
               values.emplace_back(record{value.first, value.second, basket});
+              value = typename Queue::value_type{-1, -1};
               basket = 0;
             }
-            values.pop_back();
             EXPECT_EQ(s_nQueueSize, pops);
+            EXPECT_EQ(s_nQueueSize, values.size());
             EXPECT_FALSE(pop(q, value, 0, basket, HasBaskets{}));
 
-            analyze( q, values.begin(), values.end());
+            analyze( q, values.cbegin(), values.cend());
 
             propout() << q.statistics();
             check_baskets(values.begin(), values.end(), HasBaskets{});
@@ -229,9 +230,11 @@ namespace {
 
             std::vector<size_t> latest(s_nThreadCount, 0);
             for(auto it = pValStart; it != pValEnd; ++it) {
+              ASSERT_NE(-1, it->writer_id) << std::distance(pValStart, it);
+              ASSERT_NE(-1, it->number) << std::distance(pValStart, it);
               ASSERT_LT(it->writer_id, s_nThreadCount);
               auto& last_item = latest[it->writer_id];
-              EXPECT_EQ(last_item + 1, it->number);
+              EXPECT_EQ(last_item + 1, it->number) << it->writer_id;
               last_item = it->number;
             }
 
@@ -247,7 +250,7 @@ namespace {
     }
 
     using namespace cds::container::bags;
-    using value_type = std::pair<size_t, size_t>;
+    using value_type = std::pair<intmax_t, intmax_t>;
     using gc_type = cds::gc::HP;
 
     using SBSimpleBasketQueue_HP = cds::container::SBBasketQueue<gc_type, value_type, SimpleBag>;
@@ -289,6 +292,9 @@ namespace {
 
     using CrippledWFQueue = cds::container::CrippledWFQueue<gc_type, value_type>;
     CDSSTRESS_QUEUE_F( CrippledWFQueue, std::false_type )
+
+    using BasketWFQueue = cds::container::BasketWFQueue<gc_type, value_type>;
+    CDSSTRESS_QUEUE_F( BasketWFQueue, std::false_type )
 
     struct stat_wf_queue : public cds::container::wf_queue::traits {
       typedef cds::container::wf_queue::stat<> stat;
