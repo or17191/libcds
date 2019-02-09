@@ -12,6 +12,7 @@
 #include <cds/container/details/base.h>
 #include <cds/details/marked_ptr.h>
 #include <cds/details/memkind_allocator.h>
+#include <cds/algo/MurmurHash2.h>
 
 namespace cds { namespace container {
 

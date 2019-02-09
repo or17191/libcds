@@ -173,6 +173,7 @@ set(SOURCES src/init.cpp
             src/topology_hpux.cpp
             src/topology_linux.cpp
             src/topology_osx.cpp
+            src/MurmurHash2.cpp
             src/dllmain.cpp)
 
 add_library(${CDS_SHARED_LIBRARY} SHARED ${SOURCES})
