@@ -13,6 +13,7 @@
 #include <cds/details/marked_ptr.h>
 #include <cds/details/memkind_allocator.h>
 #include <cds/algo/MurmurHash2.h>
+#include <cds/algo/uuid.h>
 
 namespace cds { namespace container {
 
@@ -345,7 +346,7 @@ namespace cds { namespace container {
     public:
         /// Initializes empty queue
         WFQueue(size_t nprocs)
-          : Ei(1), Di(1), Hi(0), Hp(node_ptr(alloc_node())), 
+          : Ei(0), Di(0), Hi(0), Hp(node_ptr(alloc_node())), 
             m_handle(), nprocs(nprocs)
         {
           m_handle.reset(new handle_type[nprocs]{});
@@ -817,6 +818,7 @@ namespace cds { namespace container {
     };
 
     namespace wf_queue {
+      template <size_t LATENCY>
       struct basket_cell_getter {
           static void delay(size_t s) {
             volatile int x;
@@ -829,14 +831,94 @@ namespace cds { namespace container {
         static id_t _(Atomic& idx, size_t tid, size_t nprocs) {
           auto tmp = idx.load(std::memory_order_acquire);
           auto i = tmp + tid; 
-          delay(20 * nprocs);
-          idx.compare_exchange_strong(tmp, tmp + nprocs, std::memory_order_seq_cst);
+          delay(LATENCY * nprocs);
+          idx.compare_exchange_strong(tmp, tmp + nprocs,
+              std::memory_order_seq_cst,
+              std::memory_order_acquire);
           return i;
+        }
+
+        static size_t basket_id(id_t idx, size_t nprocs) {
+          return idx / nprocs;
+        }
+      };
+
+      template <size_t BASKET_SIZE=8>
+      struct hash_basket_cell_getter {
+          static void delay(size_t s) {
+            volatile int x;
+            for(size_t i = 0; i < s; ++i) {
+              x = 0;
+            }
+          }
+
+          struct to_hash {
+            uint8_t tid;
+            uint64_t basket;
+          } __attribute__((packed)) ;
+
+          static_assert(sizeof(to_hash) == 9, "");
+
+        template <class Atomic>
+        static id_t _(Atomic& idx, size_t tid, size_t nprocs) {
+          auto tmp = idx.load(std::memory_order_acquire);
+          to_hash input{static_cast<uint8_t>(tid), tmp / BASKET_SIZE};
+          auto h = MurmurHash2A(&input, sizeof(input), 0);
+          auto i = tmp + (h % BASKET_SIZE); 
+          delay(35 * nprocs);
+          idx.compare_exchange_strong(tmp, tmp + BASKET_SIZE,
+              std::memory_order_seq_cst,
+              std::memory_order_acquire);
+          return i;
+        }
+
+        static size_t basket_id(id_t idx, size_t nprocs) {
+          return idx / BASKET_SIZE;
+        }
+      };
+
+      template <size_t BASKET_SIZE=8>
+      struct mod_basket_cell_getter {
+          static void delay(size_t s) {
+            volatile int x;
+            for(size_t i = 0; i < s; ++i) {
+              x = 0;
+            }
+          }
+
+          struct to_hash {
+            uint8_t tid;
+            uint64_t basket;
+          } __attribute__((packed)) ;
+
+          static_assert(sizeof(to_hash) == 9, "");
+
+        template <class Atomic>
+        static id_t _(Atomic& idx, size_t tid, size_t nprocs) {
+          auto tmp = idx.load(std::memory_order_acquire);
+          auto i = tmp + (tid % BASKET_SIZE); 
+          delay(50 * nprocs);
+          idx.compare_exchange_strong(tmp, tmp + BASKET_SIZE,
+              std::memory_order_seq_cst,
+              std::memory_order_acquire);
+          return i;
+        }
+
+        static size_t basket_id(id_t idx, size_t nprocs) {
+          return idx / BASKET_SIZE;
         }
       };
 
       struct basket_traits : traits {
-        typedef crippled_cell_getter cell_getter;
+        typedef basket_cell_getter<200> cell_getter;
+      };
+      struct hash_basket_traits : traits {
+        enum { max_patience = 40} ;
+        typedef hash_basket_cell_getter<16> cell_getter;
+      };
+      struct mod_basket_traits : traits {
+        enum { max_patience = 40} ;
+        typedef mod_basket_cell_getter<16> cell_getter;
       };
     }
 
@@ -844,26 +926,28 @@ namespace cds { namespace container {
     class BasketWFQueue : public WFQueue<GC, T, Traits>
     {
         using base_type = WFQueue<GC, T, Traits>;
-        static_assert(std::is_same<typename base_type::traits, wf_queue::basket_traits>::value, "");
         using handle_type = typename base_type::handle_type;
         using memory_model = typename base_type::memory_model;
         using scoped_value_ptr = typename base_type::scoped_value_ptr;
         using value_ptr = typename base_type::value_ptr;
         using maker = typename base_type::maker;
+        using cell_getter = typename base_type::traits::cell_getter;
+        static_assert(std::is_integral<decltype(cell_getter::basket_id(0, 0))>::value, "");
 
         public:
         using base_type::base_type;
         /// Synonym for \p dequeue() function
-       bool dequeue(typename base_type::value_type& dest, size_t tid) {
+       bool dequeue(typename base_type::value_type& dest, size_t tid, cds::uuid_type* basket = nullptr ) {
           auto& handle = base_type::m_handle[tid];
           handle.hzd_node_id.store(handle.deq_node_id, memory_model::memory_order_acquire);
 
           value_ptr v;
+          id_t idx = 0;
           while(true) {
-            auto i = base_type::Di.fetch_add(1, memory_model::memory_order_seq_cst);
-            auto cell = base_type::find_cell(handle.Dp, i, handle);
+            idx = base_type::Di.fetch_add(1, memory_model::memory_order_seq_cst);
+            auto cell = base_type::find_cell(handle.Dp, idx, handle);
             v = cell->val.exchange(maker::template top<value_ptr>(), memory_model::memory_order_seq_cst);
-            if(!maker::is_bot(v) || i >= base_type::Ei.load(memory_model::memory_order_seq_cst)) {
+            if(!maker::is_bot(v) || idx >= base_type::Ei.load(memory_model::memory_order_seq_cst)) {
               assert(!maker::is_top(v));
               break;
             }
@@ -879,6 +963,9 @@ namespace cds { namespace container {
             return false;
           } else {
             std::swap(dest, *v.ptr());
+            if(basket) {
+              *basket = cell_getter::basket_id(idx, base_type::nprocs) + 1;
+            }
             typename maker::value_deallocator{}(v.ptr());
             --base_type::m_ItemCounter;
             return true;

@@ -293,8 +293,16 @@ namespace {
     using CrippledWFQueue = cds::container::CrippledWFQueue<gc_type, value_type>;
     CDSSTRESS_QUEUE_F( CrippledWFQueue, std::false_type )
 
-    using BasketWFQueue = cds::container::BasketWFQueue<gc_type, value_type>;
-    CDSSTRESS_QUEUE_F( BasketWFQueue, std::false_type )
+    namespace wf = cds::container::wf_queue;
+
+    using BasketWFQueue = cds::container::BasketWFQueue<gc_type, value_type, wf::basket_traits>;
+    CDSSTRESS_QUEUE_F( BasketWFQueue, std::true_type )
+
+    using HashBasketWFQueue = cds::container::BasketWFQueue<gc_type, value_type, cds::container::wf_queue::hash_basket_traits>;
+    CDSSTRESS_QUEUE_F( HashBasketWFQueue, std::true_type )
+
+    using ModBasketWFQueue = cds::container::BasketWFQueue<gc_type, value_type, cds::container::wf_queue::mod_basket_traits>;
+    CDSSTRESS_QUEUE_F( ModBasketWFQueue, std::true_type )
 
     struct stat_wf_queue : public cds::container::wf_queue::traits {
       typedef cds::container::wf_queue::stat<> stat;
