@@ -843,7 +843,7 @@ namespace cds { namespace container {
         }
       };
 
-      template <size_t BASKET_SIZE=8>
+      template <size_t LOAD_FACTOR=2>
       struct hash_basket_cell_getter {
           static void delay(size_t s) {
             volatile int x;
@@ -861,23 +861,25 @@ namespace cds { namespace container {
 
         template <class Atomic>
         static id_t _(Atomic& idx, size_t tid, size_t nprocs) {
+          const auto basket_size = (nprocs + LOAD_FACTOR - 1) / LOAD_FACTOR;
           auto tmp = idx.load(std::memory_order_acquire);
-          to_hash input{static_cast<uint8_t>(tid), tmp / BASKET_SIZE};
+          const to_hash input{static_cast<uint8_t>(tid), tmp / basket_size};
           auto h = MurmurHash2A(&input, sizeof(input), 0);
-          auto i = tmp + (h % BASKET_SIZE); 
+          auto i = tmp + (h % basket_size); 
           delay(35 * nprocs);
-          idx.compare_exchange_strong(tmp, tmp + BASKET_SIZE,
+          idx.compare_exchange_strong(tmp, tmp + basket_size,
               std::memory_order_seq_cst,
               std::memory_order_acquire);
           return i;
         }
 
         static size_t basket_id(id_t idx, size_t nprocs) {
-          return idx / BASKET_SIZE;
+          const auto basket_size = (nprocs + LOAD_FACTOR - 1) / LOAD_FACTOR;
+          return idx / basket_size;
         }
       };
 
-      template <size_t BASKET_SIZE=8>
+      template <size_t LOAD_FACTOR=2>
       struct mod_basket_cell_getter {
           static void delay(size_t s) {
             volatile int x;
@@ -886,26 +888,21 @@ namespace cds { namespace container {
             }
           }
 
-          struct to_hash {
-            uint8_t tid;
-            uint64_t basket;
-          } __attribute__((packed)) ;
-
-          static_assert(sizeof(to_hash) == 9, "");
-
         template <class Atomic>
         static id_t _(Atomic& idx, size_t tid, size_t nprocs) {
+          const auto basket_size = (nprocs + LOAD_FACTOR - 1) / LOAD_FACTOR;
           auto tmp = idx.load(std::memory_order_acquire);
-          auto i = tmp + (tid % BASKET_SIZE); 
+          const auto i = tmp + (tid % basket_size); 
           delay(50 * nprocs);
-          idx.compare_exchange_strong(tmp, tmp + BASKET_SIZE,
+          idx.compare_exchange_strong(tmp, tmp + basket_size,
               std::memory_order_seq_cst,
               std::memory_order_acquire);
           return i;
         }
 
         static size_t basket_id(id_t idx, size_t nprocs) {
-          return idx / BASKET_SIZE;
+          const auto basket_size = (nprocs + LOAD_FACTOR - 1) / LOAD_FACTOR;
+          return idx / basket_size;
         }
       };
 
@@ -914,11 +911,11 @@ namespace cds { namespace container {
       };
       struct hash_basket_traits : traits {
         enum { max_patience = 40} ;
-        typedef hash_basket_cell_getter<16> cell_getter;
+        typedef hash_basket_cell_getter<> cell_getter;
       };
       struct mod_basket_traits : traits {
         enum { max_patience = 40} ;
-        typedef mod_basket_cell_getter<16> cell_getter;
+        typedef mod_basket_cell_getter<> cell_getter;
       };
     }
 
