@@ -210,8 +210,15 @@ namespace cds { namespace intrusive {
 
         /// Atomics based insert policy
         struct atomics_insert {
+          static void delay(size_t s) {
+            volatile int x;
+            for(size_t i = 0; i < s; ++i) {
+              x = 0;
+            }
+          }
           template <class MemoryModel, class Atomic, class Value>
           static bool _(Atomic& var, Value& old, Value new_) {
+            delay(200);
             return var.compare_exchange_weak(old, new_, MemoryModel::memory_order_release, MemoryModel::memory_order_relaxed);
           }
         };
