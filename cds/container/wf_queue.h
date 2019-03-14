@@ -796,16 +796,25 @@ namespace cds { namespace container {
     };
 
     namespace wf_queue {
+      static void delay(size_t s) {
+        volatile int x;
+        for(size_t i = 0; i < s; ++i) {
+          x = 0;
+        }
+      }
+
+      template <size_t LATENCY>
       struct crippled_cell_getter {
         template <class Atomic>
         static id_t _(Atomic& idx, size_t tid, size_t nprocs) {
           idx.load(std::memory_order_acquire); // Simulate the cost of CAS
+          delay(LATENCY * nprocs);
           return idx.fetch_add(1, std::memory_order_seq_cst);
         }
       };
 
       struct crippled_traits : traits {
-        typedef crippled_cell_getter cell_getter;
+        typedef crippled_cell_getter<200> cell_getter;
       };
     }
 
@@ -820,12 +829,6 @@ namespace cds { namespace container {
     namespace wf_queue {
       template <size_t LATENCY>
       struct basket_cell_getter {
-          static void delay(size_t s) {
-            volatile int x;
-            for(size_t i = 0; i < s; ++i) {
-              x = 0;
-            }
-          }
 
         template <class Atomic>
         static id_t _(Atomic& idx, size_t tid, size_t nprocs) {
@@ -843,15 +846,8 @@ namespace cds { namespace container {
         }
       };
 
-      template <size_t LOAD_FACTOR=2>
+      template <size_t LATENCY, size_t LOAD_FACTOR=2>
       struct hash_basket_cell_getter {
-          static void delay(size_t s) {
-            volatile int x;
-            for(size_t i = 0; i < s; ++i) {
-              x = 0;
-            }
-          }
-
           struct to_hash {
             uint8_t tid;
             uint64_t basket;
@@ -859,14 +855,18 @@ namespace cds { namespace container {
 
           static_assert(sizeof(to_hash) == 9, "");
 
+        static uint32_t hash(size_t tid, size_t basket) {
+          const to_hash input{static_cast<uint8_t>(tid), basket};
+          return MurmurHash2A(&input, sizeof(input), 0);
+        }
+
         template <class Atomic>
         static id_t _(Atomic& idx, size_t tid, size_t nprocs) {
           const auto basket_size = (nprocs + LOAD_FACTOR - 1) / LOAD_FACTOR;
           auto tmp = idx.load(std::memory_order_acquire);
-          const to_hash input{static_cast<uint8_t>(tid), tmp / basket_size};
-          auto h = MurmurHash2A(&input, sizeof(input), 0);
+          auto h = hash(tid, tmp / basket_size);
           auto i = tmp + (h % basket_size); 
-          delay(35 * nprocs);
+          delay(LATENCY * nprocs);
           idx.compare_exchange_strong(tmp, tmp + basket_size,
               std::memory_order_seq_cst,
               std::memory_order_acquire);
@@ -879,21 +879,15 @@ namespace cds { namespace container {
         }
       };
 
-      template <size_t LOAD_FACTOR=2>
+      template <size_t LATENCY, size_t LOAD_FACTOR=2>
       struct mod_basket_cell_getter {
-          static void delay(size_t s) {
-            volatile int x;
-            for(size_t i = 0; i < s; ++i) {
-              x = 0;
-            }
-          }
-
         template <class Atomic>
         static id_t _(Atomic& idx, size_t tid, size_t nprocs) {
           const auto basket_size = (nprocs + LOAD_FACTOR - 1) / LOAD_FACTOR;
           auto tmp = idx.load(std::memory_order_acquire);
+          hash_basket_cell_getter<LATENCY, LOAD_FACTOR>::hash(tid, tmp / basket_size);
           const auto i = tmp + (tid % basket_size); 
-          delay(50 * nprocs);
+          delay(LATENCY * nprocs);
           idx.compare_exchange_strong(tmp, tmp + basket_size,
               std::memory_order_seq_cst,
               std::memory_order_acquire);
@@ -911,11 +905,11 @@ namespace cds { namespace container {
       };
       struct hash_basket_traits : traits {
         enum { max_patience = 40} ;
-        typedef hash_basket_cell_getter<> cell_getter;
+        typedef hash_basket_cell_getter<200> cell_getter;
       };
       struct mod_basket_traits : traits {
         enum { max_patience = 40} ;
-        typedef mod_basket_cell_getter<> cell_getter;
+        typedef mod_basket_cell_getter<200> cell_getter;
       };
     }
 
