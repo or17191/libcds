@@ -8,6 +8,7 @@
 
 #include <cds/intrusive/basket_queue.h>
 #include <cds/container/details/base.h>
+#include <cds/details/memkind_allocator.h>
 #include <memory>
 
 namespace cds { namespace container {
@@ -28,7 +29,7 @@ namespace cds { namespace container {
         struct traits
         {
             /// Node allocator
-            typedef CDS_DEFAULT_ALLOCATOR       allocator;
+            typedef cds::details::memkind_allocator<int>       allocator;
 
             /// Back-off strategy
             typedef cds::backoff::empty         back_off;
