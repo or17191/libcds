@@ -216,10 +216,19 @@ namespace cds { namespace intrusive {
               x = 0;
             }
           }
-          template <class MemoryModel, class Atomic, class Value>
-          static bool _(Atomic& var, Value& old, Value new_) {
-            delay(200);
-            return var.compare_exchange_weak(old, new_, MemoryModel::memory_order_release, MemoryModel::memory_order_relaxed);
+
+          enum class InsertResult : uint8_t { NOT_NULL, FAILED_INSERT, SUCCESSFUL_INSERT };
+
+          template <class MemoryModel, class MarkedPtr>
+          static InsertResult _(MarkedPtr old_node, MarkedPtr new_node, size_t thread_count = 1) {
+            MarkedPtr pNext = old_node->m_pNext.load(MemoryModel::memory_order_relaxed);
+            if (pNext.ptr() != nullptr) {
+              return InsertResult::NOT_NULL;
+            }
+            new_node->m_pNext.store(MarkedPtr{}, MemoryModel::memory_order_relaxed);
+            delay(200 * thread_count);
+            bool res = old_node->m_pNext.compare_exchange_weak(pNext, new_node, MemoryModel::memory_order_release, MemoryModel::memory_order_relaxed);
+            return res ? InsertResult::SUCCESSFUL_INSERT : InsertResult::FAILED_INSERT;
           }
         };
 
@@ -662,16 +671,15 @@ namespace cds { namespace intrusive {
             typename gc::Guard gNext;
             back_off bkoff;
 
-            marked_ptr t;
+            marked_ptr t, pNext;
             while ( true ) {
                 pNew->m_basket_id = my_uuid;
                 t = guard.protect( m_pTail, []( marked_ptr p ) -> value_type * { return node_traits::to_value_ptr( p.ptr());});
 
-                marked_ptr pNext = t->m_pNext.load(memory_model::memory_order_relaxed );
+                auto res = insert_policy::template _<memory_model>(t, marked_ptr(pNew));
 
-                if ( pNext.ptr() == nullptr ) {
-                    pNew->m_pNext.store( marked_ptr(), memory_model::memory_order_relaxed );
-                    if (insert_policy::template _<memory_model>(t->m_pNext, pNext, marked_ptr(pNew))) {
+                if ( res != insert_policy::InsertResult::NOT_NULL ) {
+                    if (res == insert_policy::InsertResult::SUCCESSFUL_INSERT) {
                         if ( !m_pTail.compare_exchange_strong( t, marked_ptr(pNew), memory_model::memory_order_release, atomics::memory_order_relaxed ))
                             m_Stat.onAdvanceTailFailed();
                         break;

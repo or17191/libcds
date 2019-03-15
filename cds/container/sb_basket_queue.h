@@ -302,16 +302,17 @@ namespace cds { namespace container {
             typename gc::Guard gNext;
             back_off bkoff;
 
-            marked_ptr t;
+            marked_ptr t, pNext;
             while (true) {
                 pNew->m_basket_id = my_uuid;
                 t = guard.protect(m_pTail, [](marked_ptr p) -> node_type * { return node_traits::to_value_ptr(p.ptr()); });
 
                 marked_ptr pNext = t->m_pNext.load(memory_model::memory_order_relaxed);
 
-                if (pNext.ptr() == nullptr) {
-                    pNew->m_pNext.store(marked_ptr(), memory_model::memory_order_relaxed);
-                    if (insert_policy::template _<memory_model>(t->m_pNext, pNext, marked_ptr(pNew))) {
+                auto res = insert_policy::template _<memory_model>(t, marked_ptr(pNew), m_ids);
+
+                if ( res != insert_policy::InsertResult::NOT_NULL ) {
+                    if (res == insert_policy::InsertResult::SUCCESSFUL_INSERT) {
                         if (!m_pTail.compare_exchange_strong(t, marked_ptr(pNew), memory_model::memory_order_release, atomics::memory_order_relaxed))
                             m_Stat.onAdvanceTailFailed();
                         if (!node.m_bag.insert(val, id)) {

@@ -15,23 +15,42 @@ namespace cds { namespace intrusive {
 
     namespace htm_basket_queue {
       struct htm_insert {
-        template <class MemoryModel, class Atomic, class OldValue, class NewValue>
-        static bool _(Atomic& var, OldValue& old, NewValue&& new_) {
+        static void delay(size_t s) {
+          volatile int x;
+          for(size_t i = 0; i < s; ++i) {
+            x = 0;
+          }
+        }
+
+        using InsertResult = basket_queue::atomics_insert::InsertResult;
+
+        template <class MemoryModel, class MarkedPtr>
+        static InsertResult _(MarkedPtr old_node, MarkedPtr new_node, size_t thread_count = 1) {
           auto transaction = [&] {
-              if (var.load(MemoryModel::memory_order_relaxed) != old) {
-                  sync::abort<0xff>();
+              MarkedPtr pNext = old_node->m_pNext.load(MemoryModel::memory_order_relaxed);
+              if (pNext.ptr() != nullptr) {
+                sync::abort<0x01>();
               }
-              var.store(std::forward<NewValue>(new_), MemoryModel::memory_order_relaxed);
+              new_node->m_pNext.store(MarkedPtr{}, MemoryModel::memory_order_relaxed);
+              delay(200 * thread_count);
+              old_node->m_pNext.store(new_node, MemoryModel::memory_order_relaxed);
           };
           sync::htm_status status;
           do {
             status = sync::htm(transaction);
-            if (status) {
-              return true;
+            if (status.started()) {
+              return InsertResult::SUCCESSFUL_INSERT;
             }
-          } while (!status.explicit_() && !(status.conflict() && !status.retry()));
-          old = var.load(MemoryModel::memory_order_relaxed);
-          return false;
+            if (status.explicit_()) {
+              return InsertResult::NOT_NULL;
+            }
+            if (status.conflict() && status.retry()) {
+              if (old_node->m_pNext.load(MemoryModel::memory_order_relaxed).ptr() != nullptr) {
+                return InsertResult::FAILED_INSERT;
+              }
+            }
+          } while (true);
+          __builtin_unreachable();
         }
       };
 
