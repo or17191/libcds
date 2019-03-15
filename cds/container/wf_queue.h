@@ -294,6 +294,7 @@ namespace cds { namespace container {
         typedef typename traits::memory_model memory_model; ///< Memory ordering. See cds::opt::memory_model option
         typedef typename maker::id_t id_t;
         typedef typename maker::atomic_id_t atomic_id_t;
+        typedef typename traits::cell_getter cell_getter;
 
         static constexpr const size_t c_nHazardPtrCount = 2; ///< Count of hazard pointer required for the algorithm
 
@@ -496,7 +497,7 @@ namespace cds { namespace container {
 
     protected:
         id_t enq_fast(handle_type& handle, scoped_value_ptr& val, size_t tid) {
-          auto i = traits::cell_getter::_(Ei, tid, nprocs);
+          auto i = cell_getter::_(Ei, tid, nprocs);
           auto cell = find_cell(handle.Ep, i, handle);
           auto cv = maker::template bot<value_ptr>();
           if (cell->val.compare_exchange_strong(cv, value_ptr(val.get()))) {
@@ -922,10 +923,10 @@ namespace cds { namespace container {
         using scoped_value_ptr = typename base_type::scoped_value_ptr;
         using value_ptr = typename base_type::value_ptr;
         using maker = typename base_type::maker;
-        using cell_getter = typename base_type::traits::cell_getter;
-        static_assert(std::is_integral<decltype(cell_getter::basket_id(0, 0))>::value, "");
 
         public:
+        using cell_getter = typename base_type::cell_getter;
+        static_assert(std::is_integral<decltype(cell_getter::basket_id(0, 0))>::value, "");
         using base_type::base_type;
         /// Synonym for \p dequeue() function
        bool dequeue(typename base_type::value_type& dest, size_t tid, cds::uuid_type* basket = nullptr ) {
