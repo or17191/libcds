@@ -295,19 +295,19 @@ namespace {
 
     using CrippledWFQueue = cds::container::CrippledWFQueue<gc_type, value_type>;
     CDSSTRESS_QUEUE_F( CrippledWFQueue, std::false_type )
-    static_assert(std::is_same<CrippledWFQueue::cell_getter, wf::crippled_cell_getter<200>>::value, "");
+    static_assert(std::is_same<CrippledWFQueue::cell_getter, wf::crippled_cell_getter<30>>::value, "");
 
     using BasketWFQueue = cds::container::BasketWFQueue<gc_type, value_type, wf::basket_traits>;
     CDSSTRESS_QUEUE_F( BasketWFQueue, std::true_type )
-    static_assert(std::is_same<BasketWFQueue::cell_getter, wf::basket_cell_getter<200>>::value, "");
+    static_assert(std::is_same<BasketWFQueue::cell_getter, wf::basket_cell_getter<30>>::value, "");
 
     using HashBasketWFQueue = cds::container::BasketWFQueue<gc_type, value_type, cds::container::wf_queue::hash_basket_traits>;
     CDSSTRESS_QUEUE_F( HashBasketWFQueue, std::true_type )
-    static_assert(std::is_same<HashBasketWFQueue::cell_getter, wf::hash_basket_cell_getter<200>>::value, "");
+    static_assert(std::is_same<HashBasketWFQueue::cell_getter, wf::hash_basket_cell_getter<30>>::value, "");
 
     using ModBasketWFQueue = cds::container::BasketWFQueue<gc_type, value_type, cds::container::wf_queue::mod_basket_traits>;
     CDSSTRESS_QUEUE_F( ModBasketWFQueue, std::true_type )
-    static_assert(std::is_same<ModBasketWFQueue::cell_getter, wf::mod_basket_cell_getter<200>>::value, "");
+    static_assert(std::is_same<ModBasketWFQueue::cell_getter, wf::mod_basket_cell_getter<30>>::value, "");
 
     struct stat_wf_queue : public cds::container::wf_queue::traits {
       typedef cds::container::wf_queue::stat<> stat;

@@ -815,7 +815,7 @@ namespace cds { namespace container {
       };
 
       struct crippled_traits : traits {
-        typedef crippled_cell_getter<200> cell_getter;
+        typedef crippled_cell_getter<30> cell_getter;
       };
     }
 
@@ -902,15 +902,15 @@ namespace cds { namespace container {
       };
 
       struct basket_traits : traits {
-        typedef basket_cell_getter<200> cell_getter;
+        typedef basket_cell_getter<30> cell_getter;
       };
       struct hash_basket_traits : traits {
         enum { max_patience = 40} ;
-        typedef hash_basket_cell_getter<200> cell_getter;
+        typedef hash_basket_cell_getter<30> cell_getter;
       };
       struct mod_basket_traits : traits {
         enum { max_patience = 40} ;
-        typedef mod_basket_cell_getter<200> cell_getter;
+        typedef mod_basket_cell_getter<30> cell_getter;
       };
     }
 

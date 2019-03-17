@@ -11,8 +11,6 @@
 #include <cds/gc/hp.h>
 
 namespace cds { namespace container {
-  using cds::details::memkind_array;
-  using cds::details::MemkindUniquePtr;
     namespace bags {
         template <class T>
         struct PaddedValue
