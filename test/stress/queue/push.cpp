@@ -13,6 +13,20 @@
 
 // Multi-threaded queue test for push operation
 namespace {
+
+    template <class Queue, class = void> 
+    struct set_threads {
+      static constexpr bool TRIVIAL = true;
+      static void _ (Queue& q, size_t threads) {}
+    };
+
+    template <class Queue> 
+    struct set_threads<Queue, decltype(std::declval<Queue>().set_threads(0))> {
+      static constexpr bool TRIVIAL = false;
+      static void _ (Queue& q, size_t threads) {
+        q.set_threads(threads);
+      }
+    };
     using cds_test::utils::topology::Topology;
 
     static size_t s_nThreadCount = 8;
@@ -104,6 +118,7 @@ namespace {
         template <class Queue>
         void test( Queue& q )
         {
+            set_threads<Queue>::_(q, s_nThreadCount);
             cds_test::thread_pool& pool = get_pool();
 
             pool.add( new Producer<Queue>( pool, q, *s_Topology ), s_nThreadCount );
@@ -176,6 +191,9 @@ namespace {
     CDSSTRESS_FCDeque( queue_push )
     CDSSTRESS_RWQueue( queue_push )
     CDSSTRESS_StdQueue( queue_push )
+
+    static_assert(!set_threads<queue::Types<int>::BasketQueue_HP>::TRIVIAL, "");
+    static_assert(!set_threads<queue::Types<int>::HTMBasketQueue_HP>::TRIVIAL, "");
 
 #undef CDSSTRESS_Queue_F
 #define CDSSTRESS_Queue_F( test_fixture, type_name ) \

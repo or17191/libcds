@@ -35,7 +35,7 @@ namespace cds { namespace intrusive {
               if (pNext.ptr() != nullptr) {
                 _xabort(0x01);
               }
-              delay(200 * thread_count);
+              delay(30 * thread_count);
               old.store(new_node, MemoryModel::memory_order_relaxed);
               _xend();
             }
@@ -46,6 +46,7 @@ namespace cds { namespace intrusive {
               return InsertResult::NOT_NULL;
             }
             if ((ret & _XABORT_CONFLICT) != 0) {
+              delay(300);
               for(size_t i = 0; i < 5; ++ i) {
                 if(old.load(MemoryModel::memory_order_relaxed).ptr() != nullptr) {
                   return InsertResult::FAILED_INSERT;

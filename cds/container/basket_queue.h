@@ -287,6 +287,8 @@ namespace cds { namespace container {
         ~BasketQueue()
         {}
 
+        using base_class::set_threads;
+
         /// Enqueues \p val value into the queue.
         /**
             The function makes queue node in dynamic memory calling copy constructor for \p val

@@ -226,7 +226,7 @@ namespace cds { namespace intrusive {
             if (pNext.ptr() != nullptr) {
               return InsertResult::NOT_NULL;
             }
-            delay(200 * thread_count);
+            delay(30 * thread_count);
             bool res = old_node->m_pNext.compare_exchange_weak(pNext, new_node, MemoryModel::memory_order_release, MemoryModel::memory_order_relaxed);
             return res ? InsertResult::SUCCESSFUL_INSERT : InsertResult::FAILED_INSERT;
           }
@@ -492,6 +492,7 @@ namespace cds { namespace intrusive {
         stat                m_Stat  ;           ///< Internal statistics
         //@cond
         size_t const        m_nMaxHops;
+        size_t              m_nThreads = 1;
         //@endcond
 
         //@cond
@@ -657,6 +658,10 @@ namespace cds { namespace intrusive {
             dispose_node( pHead );
         }
 
+        void set_threads(size_t s) {
+          m_nThreads = s;
+        }
+
         /// Enqueues \p val value into the queue.
         /** @anchor cds_intrusive_BasketQueue_enqueue
             The function always returns \p true.
@@ -676,7 +681,7 @@ namespace cds { namespace intrusive {
                 pNew->m_basket_id = my_uuid;
                 t = guard.protect( m_pTail, []( marked_ptr p ) -> value_type * { return node_traits::to_value_ptr( p.ptr());});
 
-                auto res = insert_policy::template _<memory_model>(t, marked_ptr(pNew));
+                auto res = insert_policy::template _<memory_model>(t, marked_ptr(pNew), m_nThreads);
 
                 if ( res != insert_policy::InsertResult::NOT_NULL ) {
                     if (res == insert_policy::InsertResult::SUCCESSFUL_INSERT) {
