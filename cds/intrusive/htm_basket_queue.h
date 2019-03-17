@@ -26,27 +26,31 @@ namespace cds { namespace intrusive {
 
         template <class MemoryModel, class MarkedPtr>
         static InsertResult _(MarkedPtr old_node, MarkedPtr new_node, size_t thread_count = 1) {
-          auto transaction = [&] {
-              MarkedPtr pNext = old_node->m_pNext.load(MemoryModel::memory_order_relaxed);
-              if (pNext.ptr() != nullptr) {
-                sync::abort<0x01>();
-              }
-              new_node->m_pNext.store(MarkedPtr{}, MemoryModel::memory_order_relaxed);
-              delay(200 * thread_count);
-              old_node->m_pNext.store(new_node, MemoryModel::memory_order_relaxed);
-          };
-          sync::htm_status status;
+          new_node->m_pNext.store(MarkedPtr{}, MemoryModel::memory_order_relaxed);
+          auto& old = old_node->m_pNext;
+          int ret;
           do {
-            status = sync::htm(transaction);
-            if (status.started()) {
+            if ((ret = _xbegin()) == _XBEGIN_STARTED) {
+              MarkedPtr pNext = old.load(MemoryModel::memory_order_relaxed);
+              if (pNext.ptr() != nullptr) {
+                _xabort(0x01);
+              }
+              delay(200 * thread_count);
+              old.store(new_node, MemoryModel::memory_order_relaxed);
+              _xend();
+            }
+            if (ret == _XBEGIN_STARTED) {
               return InsertResult::SUCCESSFUL_INSERT;
             }
-            if (status.explicit_()) {
+            if ((ret & _XABORT_EXPLICIT) != 0) {
               return InsertResult::NOT_NULL;
             }
-            if (status.conflict() && status.retry()) {
-              if (old_node->m_pNext.load(MemoryModel::memory_order_relaxed).ptr() != nullptr) {
-                return InsertResult::FAILED_INSERT;
+            if ((ret & _XABORT_CONFLICT) != 0) {
+              for(size_t i = 0; i < 5; ++ i) {
+                if(old.load(MemoryModel::memory_order_relaxed).ptr() != nullptr) {
+                  return InsertResult::FAILED_INSERT;
+                }
+                delay(100);
               }
             }
           } while (true);

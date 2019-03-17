@@ -221,11 +221,11 @@ namespace cds { namespace intrusive {
 
           template <class MemoryModel, class MarkedPtr>
           static InsertResult _(MarkedPtr old_node, MarkedPtr new_node, size_t thread_count = 1) {
+            new_node->m_pNext.store(MarkedPtr{}, MemoryModel::memory_order_relaxed);
             MarkedPtr pNext = old_node->m_pNext.load(MemoryModel::memory_order_relaxed);
             if (pNext.ptr() != nullptr) {
               return InsertResult::NOT_NULL;
             }
-            new_node->m_pNext.store(MarkedPtr{}, MemoryModel::memory_order_relaxed);
             delay(200 * thread_count);
             bool res = old_node->m_pNext.compare_exchange_weak(pNext, new_node, MemoryModel::memory_order_release, MemoryModel::memory_order_relaxed);
             return res ? InsertResult::SUCCESSFUL_INSERT : InsertResult::FAILED_INSERT;
