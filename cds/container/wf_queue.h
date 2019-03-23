@@ -797,7 +797,7 @@ namespace cds { namespace container {
     };
 
     namespace wf_queue {
-      static void delay(size_t s) {
+      static inline void delay(size_t s) {
         volatile int x;
         for(size_t i = 0; i < s; ++i) {
           x = 0;
@@ -815,7 +815,7 @@ namespace cds { namespace container {
       };
 
       struct crippled_traits : traits {
-        typedef crippled_cell_getter<30> cell_getter;
+        typedef crippled_cell_getter<10> cell_getter;
       };
     }
 
@@ -902,15 +902,15 @@ namespace cds { namespace container {
       };
 
       struct basket_traits : traits {
-        typedef basket_cell_getter<30> cell_getter;
+        typedef basket_cell_getter<10> cell_getter;
       };
       struct hash_basket_traits : traits {
         enum { max_patience = 40} ;
-        typedef hash_basket_cell_getter<30> cell_getter;
+        typedef hash_basket_cell_getter<10> cell_getter;
       };
       struct mod_basket_traits : traits {
         enum { max_patience = 40} ;
-        typedef mod_basket_cell_getter<30> cell_getter;
+        typedef mod_basket_cell_getter<10> cell_getter;
       };
     }
 

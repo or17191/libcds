@@ -15,7 +15,7 @@ namespace cds { namespace intrusive {
 
     namespace htm_basket_queue {
       struct htm_insert {
-        static void delay(size_t s) {
+        static inline void delay(size_t s) {
           volatile int x;
           for(size_t i = 0; i < s; ++i) {
             x = 0;
@@ -26,6 +26,8 @@ namespace cds { namespace intrusive {
 
         template <class MemoryModel, class MarkedPtr>
         static InsertResult _(MarkedPtr old_node, MarkedPtr new_node, size_t thread_count = 1) {
+          constexpr size_t LATENCY = 10;
+          constexpr size_t PATIENCE = 10;
           new_node->m_pNext.store(MarkedPtr{}, MemoryModel::memory_order_relaxed);
           auto& old = old_node->m_pNext;
           int ret;
@@ -35,7 +37,7 @@ namespace cds { namespace intrusive {
               if (pNext.ptr() != nullptr) {
                 _xabort(0x01);
               }
-              delay(30 * thread_count);
+              delay(LATENCY * thread_count);
               old.store(new_node, MemoryModel::memory_order_relaxed);
               _xend();
             }
@@ -46,12 +48,12 @@ namespace cds { namespace intrusive {
               return InsertResult::NOT_NULL;
             }
             if ((ret & _XABORT_CONFLICT) != 0) {
-              delay(300);
-              for(size_t i = 0; i < 5; ++ i) {
+              delay(50);
+              for(size_t i = 0; i < PATIENCE; ++ i) {
                 if(old.load(MemoryModel::memory_order_relaxed).ptr() != nullptr) {
                   return InsertResult::FAILED_INSERT;
                 }
-                delay(100);
+                delay(50);
               }
             }
           } while (true);
