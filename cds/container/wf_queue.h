@@ -151,6 +151,9 @@ namespace cds { namespace container {
             typedef intmax_t id_t;
             typedef atomics::atomic<id_t> atomic_id_t;
 
+            static constexpr intmax_t NULL_ID = -1;
+            // Notice that 0 is not a valid id too.
+
             typedef typename cds::details::marked_ptr<value_type, 1> value_ptr;
             typedef typename gc::template atomic_marked_ptr<value_ptr> atomic_value_ptr;
 
@@ -256,9 +259,9 @@ namespace cds { namespace container {
 
               handle_type * next{nullptr};
               atomic_node_ptr Ep{nullptr};
-              id_t enq_node_id{-1};
+              id_t enq_node_id{NULL_ID};
               atomic_node_ptr Dp{nullptr};
-              id_t deq_node_id{-1};
+              id_t deq_node_id{NULL_ID};
               id_t Ei{0};
               handle_type * Dh{nullptr};
               size_t delay{0};
@@ -297,6 +300,7 @@ namespace cds { namespace container {
         typedef typename traits::cell_getter cell_getter;
 
         static constexpr const size_t c_nHazardPtrCount = 2; ///< Count of hazard pointer required for the algorithm
+        static constexpr id_t NULL_ID = maker::NULL_ID;
 
     protected:
         typedef typename maker::node_type node_type;           ///< queue node type (derived from intrusive::basket_queue::node)
@@ -347,7 +351,7 @@ namespace cds { namespace container {
     public:
         /// Initializes empty queue
         WFQueue(size_t nprocs)
-          : Ei(0), Di(0), Hi(0), Hp(node_ptr(alloc_node())), 
+          : Ei(1), Di(1), Hi(0), Hp(node_ptr(alloc_node())), 
             m_handle(), nprocs(nprocs)
         {
           m_handle.reset(new handle_type[nprocs]{});
@@ -398,15 +402,15 @@ namespace cds { namespace container {
             id_t id;
             for(size_t i = 0; i < traits::max_patience; ++i) {
               id = enq_fast(handle, value, tid);
-              if (id < 0) {
+              if (id == NULL_ID) {
                 break; 
               }
             }
-            if(id >= 0) {
+            if(id != NULL_ID) {
               enq_slow(handle, value, id);
             }
             handle.enq_node_id = handle.Ep.load(memory_model::memory_order_relaxed)->id;
-            handle.hzd_node_id.store(-1, memory_model::memory_order_release);
+            handle.hzd_node_id.store(NULL_ID, memory_model::memory_order_release);
             ++m_ItemCounter;
             return true;
         }
@@ -431,7 +435,7 @@ namespace cds { namespace container {
             auto v = maker::template top<value_ptr>();
             id_t id = 0;
             for(size_t i = 0 ; i < traits::max_patience; ++i) {
-              v= deq_fast(handle, id);
+              v = deq_fast(handle, id);
               if (!maker::is_top(v)) {
                 break;
               }
@@ -442,22 +446,20 @@ namespace cds { namespace container {
               m_Stat.onFastDequeue();
             }
 
-
             if (!maker::is_bot(v)) {
-              help_deq(handle, handle.Dh);
+              help_deq(handle, *handle.Dh);
               handle.Dh = handle.Dh->next;
-            } else {
-              m_Stat.onEmpty();
             }
 
             handle.deq_node_id = handle.Dp.load(memory_model::memory_order_relaxed)->id;
-            handle.hzd_node_id.store(-1, memory_model::memory_order_release);
+            handle.hzd_node_id.store(NULL_ID, memory_model::memory_order_release);
            
             if (!handle.spare) {
               cleanup(handle);
               handle.spare.reset(alloc_node());
             }
             if (maker::is_bot(v)) {
+              m_Stat.onEmpty();
               return false;
             } else {
               std::swap(dest, *v.ptr());
@@ -496,6 +498,10 @@ namespace cds { namespace container {
         }
 
     protected:
+        /**
+         * Try to fast enqueu. If successful, return NULL_ID. Otherwise, return
+         * the attempted cell id.
+         */
         id_t enq_fast(handle_type& handle, scoped_value_ptr& val, size_t tid) {
           auto i = cell_getter::_(Ei, tid, nprocs);
           auto cell = find_cell(handle.Ep, i, handle);
@@ -503,16 +509,20 @@ namespace cds { namespace container {
           if (cell->val.compare_exchange_strong(cv, value_ptr(val.get()))) {
             val.release();
             m_Stat.onFastEnqueue();
-            return -1;
+            return NULL_ID;
           } else {
             return i;
           }
         }
 
+        /**
+         * Return the cell matching the given id. If it doesn't exist, create it.
+         */
         typename maker::cell_t * find_cell(node_ptr &ptr, id_t i, handle_type& handle) {
           auto curr = ptr;
           id_t j;
           for(j = curr->id; j < i / traits::node_size; ++j) {
+            assert(j == curr->id);
             auto next = curr->next.load(memory_model::memory_order_relaxed);
             if (next == nullptr) {
               auto tmp = handle.spare.get();
@@ -534,10 +544,13 @@ namespace cds { namespace container {
           return std::addressof(curr->cells[i % traits::node_size]);
         }
 
+        /**
+         * Return the cell matching the given id. If it doesn't exist, create it.
+         */
         typename maker::cell_t * find_cell(typename maker::atomic_node_ptr& ptr, id_t i, handle_type& handle) {
-          auto tmp = ptr.load(memory_model::memory_order_relaxed);
+          auto tmp = ptr.load(memory_model::memory_order_acquire);
           auto ret = find_cell(tmp, i, handle);
-          ptr.store(tmp, memory_model::memory_order_relaxed);
+          ptr.store(tmp, memory_model::memory_order_release);
           return ret;
         }
 
@@ -551,7 +564,7 @@ namespace cds { namespace container {
           do {
             i = Ei.fetch_add(1, memory_model::memory_order_relaxed);
             c = find_cell(tail, i, handle);
-            enq_ptr_t ce{nullptr, 0}; // BOT
+            auto ce = maker::template bot<enq_ptr_t>();
             if(c->enq.compare_exchange_strong(ce, enq, memory_model::memory_order_seq_cst)
                 && !maker::is_top(c->val.load(memory_model::memory_order_relaxed))) {
               if(enq->id.compare_exchange_strong(id, -i, memory_model::memory_order_relaxed)) {
@@ -561,25 +574,43 @@ namespace cds { namespace container {
             }
           } while (enq->id > 0);
 
-          id = -enq->id;
+          id = -enq->id.load(memory_model::memory_order_acquire);
           c = find_cell(handle.Ep, id, handle);
-          if (id > i ) {
-            auto ei = Ei.load(memory_model::memory_order_relaxed);
-            while( ei <= id && Ei.compare_exchange_strong(ei, id + 1, memory_model::memory_order_relaxed));
+          if (id > i) {
+            swing_past_value(Ei, id);
           }
           c->val.store(value_ptr(val.release()), memory_model::memory_order_relaxed);
           m_Stat.onSlowEnqueue();
         }
 
+        /**
+         * Postcondition - id > value.
+         */
+        void swing_past_value(atomic_id_t& id, id_t value) {
+          auto old = id.load(memory_model::memory_order_relaxed);
+          while(old <= value && !id.compare_exchange_strong(old, value + 1, memory_model::memory_order_relaxed));
+        }
+
+        /**
+         * Try a fast dequeue from Di.
+         *
+         * Return BOT if the cell was empty.
+         * Return TOP if an enqueue failed on the cell
+         * Return a valid pointer if an enqueue was successful on the cell
+         */
         value_ptr deq_fast(handle_type& handle, id_t& id) {
           auto i = Di.fetch_add(1, memory_model::memory_order_seq_cst);
           auto c = find_cell(handle.Dp, i, handle);
           auto v = help_enq(handle, c, i);
-          auto cd = maker::template bot<deq_ptr_t>();
+          // Empty queue
           if(maker::is_bot(v)) { return maker::template bot<value_ptr>(); }
-          if(!maker::is_top(v) && c->deq.compare_exchange_strong(cd, maker::template top<deq_ptr_t>(), memory_model::memory_order_relaxed)) {
+          auto cd = maker::template bot<deq_ptr_t>();
+          if(!maker::is_top(v) &&
+              c->deq.compare_exchange_strong(cd, maker::template top<deq_ptr_t>(), memory_model::memory_order_relaxed)) {
+            // Cell was enqueued on (either slow path or fast path)
             return v;
           }
+          // Enqueue failed on cell
           id = i;
           return maker::template top<value_ptr>();
         }
@@ -588,7 +619,7 @@ namespace cds { namespace container {
           auto& deq = handle.Dr;
           deq.id.store(id, memory_model::memory_order_release);
           deq.idx.store(id, memory_model::memory_order_release);
-          help_deq(handle, std::addressof(handle)); // TODO ?
+          help_deq(handle, handle); 
           auto i = -deq.idx;
           auto c = find_cell(handle.Dp, i, handle);
           auto val = c->val.load(memory_model::memory_order_relaxed);
@@ -596,20 +627,33 @@ namespace cds { namespace container {
           return maker::is_top(val) ? maker::template bot<value_ptr>() : val;
         }
 
+        /**
+         * Try to help enqueue the value from c->enq.
+         *
+         * Return:
+         * - valid pointer - if the cell already had a valid value
+         * - bot - Queue can be considered empty
+         * - top - Dequeue from cell i has failed
+         */
         value_ptr help_enq(handle_type& handle, typename maker::cell_t* c, id_t i) {
           auto v = spin(c->val);
-          if (v.ptr() || (maker::is_bot(v) && !c->val.compare_exchange_strong(v, maker::template top<value_ptr>(), memory_model::memory_order_seq_cst) && !maker::is_top(v))) {
+          if (v.ptr() || // is a valid value
+              (maker::is_bot(v) && // Wasn't empty
+               !c->val.compare_exchange_strong(v, // failed to nullify cell
+                 maker::template top<value_ptr>(), memory_model::memory_order_seq_cst) &&
+               !maker::is_top(v))) { // the existing value wasn't top.
+            assert(v.ptr() != nullptr);
             return v;
           }
+          // The cell is top
+          assert(maker::is_top(c->val.load(memory_model::memory_order_relaxed)));
 
           auto e = c->enq.load(memory_model::memory_order_relaxed);
           if (maker::is_bot(e)) {
-            handle_type* ph;
-            enq_ptr_t pe;
-            id_t id;
-            ph = handle.Eh;
-            pe = std::addressof(ph->Er);
-            id = pe->id;
+            // No enqueue request in c.
+            auto ph = handle.Eh;
+            enq_ptr_t pe{std::addressof(ph->Er)};
+            id_t id = pe->id.load(memory_model::memory_order_relaxed);
 
             if(handle.Ei != 0 && handle.Ei != id) {
               handle.Ei = 0;
@@ -623,26 +667,31 @@ namespace cds { namespace container {
             } else {
               handle.Eh = ph->next;
             }
+            // If there isn't a pending request, disallow enques from the cell.
             if (maker::is_bot(e) && c->enq.compare_exchange_strong(e, maker::template top<enq_ptr_t>(), memory_model::memory_order_relaxed)) {
               e = maker::template top<enq_ptr_t>();
             }
           }
 
+          // Check if the cell has a valid request
           if (maker::is_top(e)) {
+            // If Ei <= i, we try to dequeue from the future.
             return Ei.load(memory_model::memory_order_relaxed) <= i ? maker::template bot<value_ptr>() : maker::template top<value_ptr>();
           }
 
+          // e is a valid enqueue request we want to complete
           auto ei = e->id.load(memory_model::memory_order_acquire);
           auto ev = e->val.load(memory_model::memory_order_acquire);
           if (ei > i) {
+            // Dequeue from the future
             if (maker::is_top(ev) && Ei.load(memory_model::memory_order_relaxed) <= i) {
               return maker::template bot<value_ptr>();
             }
           } else {
+            // Try to claim the request
             if ((ei > 0 && e->id.compare_exchange_strong(ei, -i, memory_model::memory_order_relaxed))
                 || (ei == -i && maker::is_top(c->val.load(memory_model::memory_order_relaxed)))) {
-              auto ei = Ei.load(memory_model::memory_order_relaxed);
-              while(ei <= i && !Ei.compare_exchange_strong(ei, i + 1, memory_model::memory_order_relaxed));
+              swing_past_value(Ei, i);
               c->val.store(ev, memory_model::memory_order_relaxed);
             }
           }
@@ -650,64 +699,64 @@ namespace cds { namespace container {
         }
        
 
-        void help_deq(handle_type& handle, handle_type * ph) {
-          auto deq = std::addressof(ph->Dr);
-          auto idx = deq->idx.load(memory_model::memory_order_acquire);
-          auto id = deq->id.load(memory_model::memory_order_relaxed);
+        void help_deq(handle_type& handle, handle_type& assisted) {
+          auto& deq = assisted.Dr;
+          auto idx = deq.idx.load(memory_model::memory_order_acquire);
+          auto id = deq.id.load(memory_model::memory_order_relaxed);
           
           if (idx < id) {
             return;
           }
 
-          auto Dp = ph->Dp.load(memory_model::memory_order_relaxed);
-          {
-            handle.hzd_node_id.store(ph->hzd_node_id.load(memory_model::memory_order_relaxed), memory_model::memory_order_relaxed);
-            atomics::atomic_thread_fence(memory_model::memory_order_seq_cst);
-            idx = deq->idx.load(memory_model::memory_order_relaxed);
-            auto i = id + 1;
-            auto old = id;
-            auto new_ = 0;
-            while(true) {
-              auto h = Dp;
-              for(; idx == old && new_ == 0; ++i) {
-                auto c = find_cell(h, i, handle);
-                auto di = Di.load(memory_model::memory_order_relaxed);
-                while(di <= i && !Di.compare_exchange_strong(di, i + 1));
-                auto v = help_enq(handle, c, i);
-                if(maker::is_bot(v) || (!maker::is_top(v) && maker::is_bot(c->deq.load(memory_model::memory_order_relaxed)))){
-                  new_ = i;
-                } else {
-                  idx = deq->idx.load(memory_model::memory_order_acquire);
-                }
+          auto Dp = assisted.Dp.load(memory_model::memory_order_relaxed);
+          auto hzd = assisted.hzd_node_id.load(memory_model::memory_order_relaxed);
+          handle.hzd_node_id.store(hzd, memory_model::memory_order_relaxed);
+          atomics::atomic_thread_fence(memory_model::memory_order_seq_cst);
+          idx = deq.idx.load(memory_model::memory_order_relaxed);
+          auto i = id + 1;
+          auto old = id;
+          auto new_ = 0;
+          while(true) {
+            auto h = Dp;
+            // This happens twice at most
+            for(; idx == old && new_ == 0; ++i) {
+              auto c = find_cell(h, i, handle);
+              swing_past_value(Di, i);
+              auto v = help_enq(handle, c, i);
+              if(maker::is_bot(v) || (!maker::is_top(v) && maker::is_bot(c->deq.load(memory_model::memory_order_relaxed)))){
+                new_ = i;
+              } else {
+                idx = deq.idx.load(memory_model::memory_order_acquire);
               }
+            }
 
-              if (new_ != 0) {
-                if(deq->idx.compare_exchange_strong(idx, new_, memory_model::memory_order_release,
-                      memory_model::memory_order_acquire)) {
-                  idx = new_;
-                }
-                if (idx >= new_) {
-                  new_ = 0;
-                }
+            if (new_ != 0) {
+              if(deq.idx.compare_exchange_strong(idx, new_, memory_model::memory_order_release,
+                    memory_model::memory_order_acquire)) {
+                idx = new_;
               }
+              if (idx >= new_) {
+                new_ = 0;
+              }
+            }
 
-              if (idx < 0 || deq->id.load(memory_model::memory_order_relaxed) != id) {
-                break;
-              }
+            if (idx < 0 || deq.id.load(memory_model::memory_order_relaxed) != id) {
+              break;
+            }
 
-              auto c = find_cell(Dp, idx, handle);
-              auto cd = maker::template bot<deq_ptr_t>();
-              if(maker::is_top(c->val.load(memory_model::memory_order_relaxed)) ||
-                  c->deq.compare_exchange_strong(cd, deq_ptr_t(deq), memory_model::memory_order_relaxed) ||
-                  cd == deq) {
-                deq->idx.compare_exchange_strong(idx, -idx, memory_model::memory_order_relaxed);
-                break;
-              }
+            auto c = find_cell(Dp, idx, handle);
+            auto cd = maker::template bot<deq_ptr_t>();
+            auto m_deq = deq_ptr_t(std::addressof(deq));
+            if(maker::is_top(c->val.load(memory_model::memory_order_relaxed)) ||
+                c->deq.compare_exchange_strong(cd, m_deq, memory_model::memory_order_relaxed) ||
+                cd == m_deq) {
+              deq.idx.compare_exchange_strong(idx, -idx, memory_model::memory_order_relaxed);
+              break;
+            }
 
-              old = idx;
-              if (idx >= i) {
-                i = idx + 1;
-              }
+            old = idx;
+            if (idx >= i) {
+              i = idx + 1;
             }
           }
         }
@@ -785,7 +834,7 @@ namespace cds { namespace container {
             auto v = p.load(memory_model::memory_order_relaxed);
 
             for(size_t i = 0; i < traits::max_spin; ++i) {
-              if (v.ptr() != nullptr) {
+              if (!maker::is_bot(v)) {
                 break;
               }
               v = p.load(memory_model::memory_order_relaxed);
@@ -933,7 +982,7 @@ namespace cds { namespace container {
           auto& handle = base_type::m_handle[tid];
           handle.hzd_node_id.store(handle.deq_node_id, memory_model::memory_order_acquire);
 
-          value_ptr v;
+          value_ptr v{nullptr};
           id_t idx = 0;
           while(true) {
             idx = base_type::Di.fetch_add(1, memory_model::memory_order_seq_cst);
