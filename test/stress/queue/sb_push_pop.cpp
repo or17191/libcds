@@ -5,11 +5,18 @@
 
 #include "queue_type.h"
 
+#include <cds/container/sb_basket_queue.h>
 #include <cds/container/wf_queue.h>
+#include <cds/container/bags.h>
 
 #include <vector>
 #include <algorithm>
 #include <type_traits>
+
+#include <cds_test/topology.h>
+#include <cds_test/check_baskets.h>
+
+#include <boost/optional.hpp>
 
 namespace cds_test {
 
@@ -38,6 +45,8 @@ namespace cds_test {
 // Multi-threaded queue push/pop test
 namespace {
 
+    using cds_test::utils::topology::Topology;
+    static boost::optional<Topology> s_Topology;
     static size_t s_nConsumerThreadCount = 4;
     static size_t s_nProducerThreadCount = 4;
     static size_t s_nQueueSize = 4000000;
@@ -93,6 +102,7 @@ namespace {
             {
                 auto id_ = id();
                 size_t const nPushCount = m_nPushCount;
+                s_Topology->pin_thread(id_);
                 value_type v;
                 v.nWriterNo = id();
                 v.nNo = 0;
@@ -106,6 +116,7 @@ namespace {
                 }
 
                 s_nProducerDone.fetch_add( 1 );
+                s_Topology->verify_pin(id_);
             }
 
         public:
@@ -171,6 +182,7 @@ namespace {
             virtual void test()
             {
                 auto id_ = id();
+                s_Topology->pin_thread(id_);
                 m_nPopEmpty = 0;
                 m_nPopped = 0;
                 m_nBadWriter = 0;
@@ -193,6 +205,7 @@ namespace {
                         writers_done = s_nProducerDone.load() >= nTotalWriters;
                     }
                 }
+                s_Topology->verify_pin(id_);
             }
         };
 
@@ -284,13 +297,13 @@ namespace {
         void test_queue( Queue& q )
         {
             m_nThreadPushCount = s_nQueueSize / s_nProducerThreadCount;
+            s_nQueueSize = m_nThreadPushCount * s_nProducerThreadCount;
 
             cds_test::thread_pool& pool = get_pool();
             pool.add( new Producer<Queue>( pool, q, m_nThreadPushCount ), s_nProducerThreadCount );
             pool.add( new Consumer<Queue>( pool, q, m_nThreadPushCount ), s_nConsumerThreadCount );
 
             s_nProducerDone.store( 0 );
-            s_nQueueSize = m_nThreadPushCount * s_nProducerThreadCount;
 
             propout() << std::make_pair( "producer_count", s_nProducerThreadCount )
                 << std::make_pair( "consumer_count", s_nConsumerThreadCount )
@@ -342,7 +355,15 @@ namespace {
             if ( s_nHeavyValueSize == 0 )
                 s_nHeavyValueSize = 1;
 
+            std::cout << "[ STAT     ] Producer = " << s_nProducerThreadCount << std::endl;
+            std::cout << "[ STAT     ] Consumer = " << s_nConsumerThreadCount << std::endl;
+            std::cout << "[ STAT     ] QueueSize = " << s_nQueueSize << std::endl;
+
             set_array_size( s_nHeavyValueSize );
+
+            s_Topology = Topology(s_nProducerThreadCount + s_nConsumerThreadCount);
+
+            std::cout << "[ STAT     ] Topology = " << *s_Topology << std::endl;
         }
 
         //static void TearDownTestCase();
@@ -363,6 +384,16 @@ namespace {
     using WFQueue = cds::container::WFQueue<typename Fixture::gc_type, typename Fixture::value_type>;
 
     CDSSTRESS_Queue_F( simple_sb_queue_push_pop, WFQueue )
+
+    using namespace cds::container::bags;
+
+    // template <class Fixture>
+    // using SBStackBasketQueue_HP = cds::container::SBBasketQueue<typename Fixture::gc_type, typename Fixture::value_type, StackBag>;
+    // CDSSTRESS_Queue_F( simple_sb_queue_push_pop, SBStackBasketQueue_HP )
+
+    template <class Fixture>
+    using SBSimpleBasketQueue_HP = cds::container::SBBasketQueue<typename Fixture::gc_type, typename Fixture::value_type, SimpleBag>;
+    CDSSTRESS_Queue_F( simple_sb_queue_push_pop, SBSimpleBasketQueue_HP )
 
 #undef CDSSTRESS_Queue_F
 
