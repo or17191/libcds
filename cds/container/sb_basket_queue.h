@@ -290,7 +290,6 @@ namespace cds { namespace container {
         {
             value_type val(std::forward<Arg>(tmp_val));
             base_node_type* pNew = nullptr;
-            auto my_uuid = uuid();
 
             typename gc::Guard guard;
             typename gc::Guard gNext;
@@ -302,8 +301,8 @@ namespace cds { namespace container {
                   node_ptr.reset(alloc_node());
                   pNew = node_traits::to_node_ptr(node_ptr.get());
                   link_checker::is_empty(pNew);
+                  pNew->m_basket_id = uuid();
                 }
-                pNew->m_basket_id = my_uuid;
                 t = guard.protect(m_pTail, [](marked_ptr p) -> node_type * { return node_traits::to_value_ptr(p.ptr()); });
 
                 auto res = insert_policy::template _<memory_model>(t, marked_ptr(pNew), m_ids);
@@ -319,7 +318,6 @@ namespace cds { namespace container {
                         }
                         break;
                     }
-                    pNew->m_basket_id = 0;
 
                     // Try adding to basket
                     m_Stat.onTryAddBasket();
