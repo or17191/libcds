@@ -126,6 +126,7 @@ namespace cds { namespace container {
             {
                 assert(id < m_size);
                 auto &v = m_bag[id];
+                assert(v.value.flag == false);
                 v.value.flag = true;
                 std::swap(t, v.value.value);
                 return true;

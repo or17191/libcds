@@ -289,7 +289,10 @@ namespace cds { namespace container {
         bool do_enqueue(scoped_node_ptr &node_ptr, Arg &&tmp_val, size_t id)
         {
             value_type val(std::forward<Arg>(tmp_val));
-            base_node_type* pNew = nullptr;
+            base_node_type* pNew = node_traits::to_node_ptr(node_ptr.get());
+            if (pNew) {
+              link_checker::is_empty(pNew);
+            }
 
             typename gc::Guard guard;
             typename gc::Guard gNext;
@@ -299,6 +302,7 @@ namespace cds { namespace container {
             while (true) {
                 if(!node_ptr) {
                   node_ptr.reset(alloc_node());
+                  assert(node_ptr.get() != nullptr);
                   pNew = node_traits::to_node_ptr(node_ptr.get());
                   link_checker::is_empty(pNew);
                   pNew->m_basket_id = uuid();
