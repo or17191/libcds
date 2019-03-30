@@ -305,7 +305,7 @@ namespace cds { namespace container {
                 }
                 t = guard.protect(m_pTail, [](marked_ptr p) -> node_type * { return node_traits::to_value_ptr(p.ptr()); });
 
-                auto res = insert_policy::template _<memory_model>(t, marked_ptr(pNew), m_ids);
+                auto res = insert_policy::template _<memory_model>(t, marked_ptr(pNew), pNext, m_ids);
 
                 if ( res != insert_policy::InsertResult::NOT_NULL ) {
                     if (res == insert_policy::InsertResult::SUCCESSFUL_INSERT) {
@@ -333,14 +333,12 @@ namespace cds { namespace container {
                         if (node_traits::to_value_ptr(pNext.ptr())->m_bag.insert(val, id)) {
                             m_Stat.onAddBasket();
                             break;
+                        } else {
+                            continue;
                         }
-                        goto try_again;
                     }
                 } else {
                     // Tail is misplaced, advance it
-
-                    pNext = t->m_pNext.load(memory_model::memory_order_acquire);
-
                     typename gc::template GuardArray<2> g;
                     g.assign(0, node_traits::to_value_ptr(pNext.ptr()));
                     if (m_pTail.load(memory_model::memory_order_acquire) != t || t->m_pNext.load(memory_model::memory_order_relaxed) != pNext) {

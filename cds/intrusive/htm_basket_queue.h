@@ -25,7 +25,7 @@ namespace cds { namespace intrusive {
         using InsertResult = basket_queue::atomics_insert::InsertResult;
 
         template <class MemoryModel, class MarkedPtr>
-        static InsertResult _(MarkedPtr old_node, MarkedPtr new_node, size_t thread_count = 1) {
+        static InsertResult _(MarkedPtr old_node, MarkedPtr new_node, MarkedPtr& new_value, size_t thread_count = 1) {
           constexpr size_t LATENCY = 10;
           constexpr size_t PATIENCE = 10;
           new_node->m_pNext.store(MarkedPtr{}, MemoryModel::memory_order_relaxed);
@@ -45,12 +45,15 @@ namespace cds { namespace intrusive {
               return InsertResult::SUCCESSFUL_INSERT;
             }
             if ((ret & _XABORT_EXPLICIT) != 0) {
+              new_value = old.load(MemoryModel::memory_order_acquire);
               return InsertResult::NOT_NULL;
             }
             if ((ret & _XABORT_CONFLICT) != 0) {
               delay(50);
               for(size_t i = 0; i < PATIENCE; ++ i) {
-                if(old.load(MemoryModel::memory_order_relaxed).ptr() != nullptr) {
+                auto value = old.load(MemoryModel::memory_order_relaxed);
+                if(value.ptr() != nullptr) {
+                  new_value = value;
                   return InsertResult::FAILED_INSERT;
                 }
                 delay(50);

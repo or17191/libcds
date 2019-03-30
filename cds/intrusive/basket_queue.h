@@ -220,16 +220,22 @@ namespace cds { namespace intrusive {
           enum class InsertResult : uint8_t { NOT_NULL, FAILED_INSERT, SUCCESSFUL_INSERT };
 
           template <class MemoryModel, class MarkedPtr>
-          static InsertResult _(MarkedPtr old_node, MarkedPtr new_node, size_t thread_count = 1) {
+          static InsertResult _(MarkedPtr old_node, MarkedPtr new_node, MarkedPtr& next_value, size_t thread_count = 1) {
             constexpr size_t LATENCY = 10;
             new_node->m_pNext.store(MarkedPtr{}, MemoryModel::memory_order_relaxed);
             MarkedPtr pNext = old_node->m_pNext.load(MemoryModel::memory_order_relaxed);
             if (pNext.ptr() != nullptr) {
+              next_value = pNext;
               return InsertResult::NOT_NULL;
             }
             delay(LATENCY * thread_count);
             bool res = old_node->m_pNext.compare_exchange_weak(pNext, new_node, MemoryModel::memory_order_release, MemoryModel::memory_order_relaxed);
-            return res ? InsertResult::SUCCESSFUL_INSERT : InsertResult::FAILED_INSERT;
+            if (!res) {
+              next_value = pNext;
+              return InsertResult::FAILED_INSERT;
+            } else {
+              return InsertResult::SUCCESSFUL_INSERT;
+            }
           }
         };
 
@@ -682,7 +688,7 @@ namespace cds { namespace intrusive {
                 pNew->m_basket_id = my_uuid;
                 t = guard.protect( m_pTail, []( marked_ptr p ) -> value_type * { return node_traits::to_value_ptr( p.ptr());});
 
-                auto res = insert_policy::template _<memory_model>(t, marked_ptr(pNew), m_nThreads);
+                auto res = insert_policy::template _<memory_model>(t, marked_ptr(pNew), pNext, m_nThreads);
 
                 if ( res != insert_policy::InsertResult::NOT_NULL ) {
                     if (res == insert_policy::InsertResult::SUCCESSFUL_INSERT) {
