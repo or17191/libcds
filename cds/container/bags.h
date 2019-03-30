@@ -80,8 +80,17 @@ namespace cds { namespace container {
                 return true;
             }
 
+            bool empty() const {
+              auto pushes = m_pushes.load(atomics::memory_order_acquire);
+              auto real_size = m_real_size.load(atomics::memory_order_acquire);
+              auto pops = m_pops.load(atomics::memory_order_acquire);
+              if (real_size == NO_SIZE) {
+                return pushes == 0;
+              } else {
+                return pops >= real_size;
+              }
+            }
             /*
-            bool empty() const { return m_counter.load(atomics::memory_order_acquire) <= 0; }
             size_t size() const
             {
                 auto size_ = m_counter.load(atomics::memory_order_acquire);
