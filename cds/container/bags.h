@@ -49,7 +49,7 @@ namespace cds { namespace container {
                 auto idx = m_pushes.fetch_add(1, atomics::memory_order_acquire);
                 assert(idx < m_size);
                 auto real_size = m_real_size.load(atomics::memory_order_acquire);
-                if (real_size == NO_SIZE || real_size <= idx) {
+                if (real_size != NO_SIZE && real_size <= idx) {
                   return false;
                 }
                 auto& cell = m_bag[idx].value;
