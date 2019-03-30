@@ -215,13 +215,7 @@ namespace cds { namespace container {
         bool enqueue(Arg &&val, size_t id)
         {
             auto &p = m_nodes_cache[id].node;
-            if (p == nullptr) {
-                p.reset(alloc_node());
-            }
-            if (do_enqueue(*p, std::forward<Arg>(val), id)) {
-                if (node_traits::to_node_ptr(*p)->m_basket_id != 0) {
-                    p.release();
-                }
+            if (do_enqueue(p, std::forward<Arg>(val), id)) {
                 return true;
             }
             return false;
@@ -292,31 +286,35 @@ namespace cds { namespace container {
 
     private:
         template <class Arg>
-        bool do_enqueue(node_type &node, Arg &&tmp_val, size_t id)
+        bool do_enqueue(scoped_node_ptr &node_ptr, Arg &&tmp_val, size_t id)
         {
             value_type val(std::forward<Arg>(tmp_val));
-            base_node_type *pNew = node_traits::to_node_ptr(node);
+            base_node_type* pNew = nullptr;
             auto my_uuid = uuid();
-            link_checker::is_empty(pNew);
 
             typename gc::Guard guard;
             typename gc::Guard gNext;
             back_off bkoff;
 
-            marked_ptr t, pNext;
+            marked_ptr t{}, pNext{};
             while (true) {
+                if(!node_ptr) {
+                  node_ptr.reset(alloc_node());
+                  pNew = node_traits::to_node_ptr(node_ptr.get());
+                  link_checker::is_empty(pNew);
+                }
                 pNew->m_basket_id = my_uuid;
                 t = guard.protect(m_pTail, [](marked_ptr p) -> node_type * { return node_traits::to_value_ptr(p.ptr()); });
-
-                marked_ptr pNext = t->m_pNext.load(memory_model::memory_order_relaxed);
 
                 auto res = insert_policy::template _<memory_model>(t, marked_ptr(pNew), m_ids);
 
                 if ( res != insert_policy::InsertResult::NOT_NULL ) {
                     if (res == insert_policy::InsertResult::SUCCESSFUL_INSERT) {
+                        auto node = node_ptr.get();
+                        node_ptr.release();
                         if (!m_pTail.compare_exchange_strong(t, marked_ptr(pNew), memory_model::memory_order_release, atomics::memory_order_relaxed))
                             m_Stat.onAdvanceTailFailed();
-                        if (!node.m_bag.insert(val, id)) {
+                        if (!node->m_bag.insert(val, id)) {
                             continue;
                         }
                         break;
@@ -342,6 +340,8 @@ namespace cds { namespace container {
                     }
                 } else {
                     // Tail is misplaced, advance it
+
+                    pNext = t->m_pNext.load(memory_model::memory_order_acquire);
 
                     typename gc::template GuardArray<2> g;
                     g.assign(0, node_traits::to_value_ptr(pNext.ptr()));
@@ -474,9 +474,6 @@ namespace cds { namespace container {
                             if (bDeque) {
                                 if (value_node->m_bag.extract(res.value)) {
                                     res.basket_id = pNext->m_basket_id;
-                                    if (value_node->m_bag.empty()) {
-                                        mark_deleted();
-                                    }
                                     break;
                                 } else {
                                     // empty node, mark it as deleted.
