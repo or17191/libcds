@@ -73,6 +73,7 @@ namespace cds { namespace container {
             };
 
             typedef cds::intrusive::BasketQueue<gc, node_type, intrusive_traits> type;
+            static constexpr const size_t c_nHazardPtrCount = type::c_nHazardPtrCount + bag_type::c_nHazardPtrCount; ///< Count of hazard pointer required for the algorithm
         };
     } // namespace details
     //@endcond
@@ -104,7 +105,7 @@ namespace cds { namespace container {
         typedef typename base_class::stat stat;                 ///< Internal statistics policy used
         typedef typename base_class::memory_model memory_model; ///< Memory ordering. See cds::opt::memory_model option
 
-        static constexpr const size_t c_nHazardPtrCount = base_class::c_nHazardPtrCount; ///< Count of hazard pointer required for the algorithm
+        static constexpr const size_t c_nHazardPtrCount = maker::c_nHazardPtrCount; ///< Count of hazard pointer required for the algorithm
 
         typedef typename base_class::insert_policy insert_policy;
 
@@ -129,15 +130,15 @@ namespace cds { namespace container {
         };
 
         //@cond
-        atomic_marked_ptr m_pHead; ///< Queue's head pointer (aligned)
+        atomic_marked_ptr m_pHead{&m_Dummy}; ///< Queue's head pointer (aligned)
         typename opt::details::apply_padding<atomic_marked_ptr, traits::padding>::padding_type pad1_;
-        atomic_marked_ptr m_pTail; ///< Queue's tail pointer (aligned)
+        atomic_marked_ptr m_pTail{&m_Dummy}; ///< Queue's tail pointer (aligned)
         typename opt::details::apply_padding<atomic_marked_ptr, traits::padding>::padding_type pad2_;
         node_type m_Dummy; ///< dummy node
         typename opt::details::apply_padding<node_type, traits::padding>::padding_type pad3_;
         item_counter m_ItemCounter; ///< Item counter
         stat m_Stat;                ///< Internal statistics
-        size_t const m_nMaxHops;
+        size_t const m_nMaxHops = 3;
         size_t const m_ids;
         //@endcond
 
@@ -166,14 +167,14 @@ namespace cds { namespace container {
         struct padded_ptr
         {
             scoped_node_ptr node;
-            typename opt::details::apply_padding<std::unique_ptr<node_type>, traits::padding>::padding_type pad1_;
+            typename opt::details::apply_padding<scoped_node_ptr, traits::padding>::padding_type pad1_;
         };
         std::unique_ptr<padded_ptr[]> m_nodes_cache;
 
     public:
         /// Initializes empty queue
         SBBasketQueue(size_t ids)
-            : m_Dummy(0), m_pHead(&m_Dummy), m_pTail(&m_Dummy), m_nMaxHops(3), m_ids(ids),
+            : m_Dummy(ids), m_ids(ids),
               m_nodes_cache(new padded_ptr[m_ids]())
         {
         }
