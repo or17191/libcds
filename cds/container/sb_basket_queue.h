@@ -327,7 +327,6 @@ namespace cds { namespace container {
                     m_Stat.onTryAddBasket();
 
                     // Reread tail next
-                try_again:
                     pNext = gNext.protect(t->m_pNext, [](marked_ptr p) -> node_type * { return node_traits::to_value_ptr(p.ptr()); });
 
                     // add to the basket
@@ -465,19 +464,16 @@ namespace cds { namespace container {
                             free_chain(h, iter);
                         else {
                             auto value_node = node_traits::to_value_ptr(*pNext.ptr());
-                            auto mark_deleted = [&] {
-                                if (iter->m_pNext.compare_exchange_weak(pNext, marked_ptr(pNext.ptr(), 1), memory_model::memory_order_acquire, atomics::memory_order_relaxed)) {
-                                    if (hops >= m_nMaxHops)
-                                        free_chain(h, pNext);
-                                }
-                            };
                             if (bDeque) {
                                 if (value_node->m_bag.extract(res.value)) {
-                                    res.basket_id = pNext->m_basket_id;
+                                    res.basket_id = value_node->m_basket_id;
                                     break;
                                 } else {
                                     // empty node, mark it as deleted.
-                                    mark_deleted();
+                                    if (iter->m_pNext.compare_exchange_weak(pNext, marked_ptr(pNext.ptr(), 1), memory_model::memory_order_acquire, atomics::memory_order_relaxed)) {
+                                        if (hops >= m_nMaxHops)
+                                            free_chain(h, pNext);
+                                    }
                                 }
                             } else {
                                 // Not sure how thread safe that is

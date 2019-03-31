@@ -46,7 +46,7 @@ namespace cds { namespace container {
             }
             bool insert(T &t, size_t /*id*/)
             {
-                auto idx = m_pushes.fetch_add(1, atomics::memory_order_acquire);
+                auto idx = m_pushes.fetch_add(1, atomics::memory_order_acq_rel);
                 assert(idx < m_size);
                 auto real_size = m_real_size.load(atomics::memory_order_acquire);
                 if (real_size != NO_SIZE && real_size <= idx) {
