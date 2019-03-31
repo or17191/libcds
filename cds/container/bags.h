@@ -60,8 +60,8 @@ namespace cds { namespace container {
             }
             bool extract(T &t)
             {
-                int real_size = NO_SIZE;
-                {
+                int real_size = m_real_size.load(atomics::memory_order_acquire);
+                if (real_size == NO_SIZE) {
                   auto pushes = m_pushes.load(atomics::memory_order_acquire);
                   assert(pushes <= m_size);
                   if(m_real_size.compare_exchange_strong(real_size, pushes, atomics::memory_order_acq_rel)) {
