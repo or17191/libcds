@@ -233,11 +233,11 @@ namespace cds { namespace container {
             dequeued value. The assignment operator for \p value_type is invoked.
             If queue is empty, the function returns \p false, \p dest is unchanged.
         */
-        bool dequeue(value_type &dest, size_t /*tid*/, uuid_type *basket_id = nullptr)
+        bool dequeue(value_type &dest, size_t tid, uuid_type *basket_id = nullptr)
         {
 
             dequeue_result res;
-            if (do_dequeue(res, true)) {
+            if (do_dequeue(res, true, tid)) {
                 // TSan finds a race between this read of \p src and node_type constructor
                 // I think, it is wrong
                 CDS_TSAN_ANNOTATE_IGNORE_READS_BEGIN;
@@ -261,12 +261,12 @@ namespace cds { namespace container {
         bool empty()
         {
             dequeue_result res;
-            return !do_dequeue(res, false);
+            return !do_dequeue(res, false, 0);
         }
         void clear()
         {
             dequeue_result res;
-            while (do_dequeue(res, true))
+            while (do_dequeue(res, true, 0))
                 ;
         }
 
@@ -412,7 +412,7 @@ namespace cds { namespace container {
             }
         }
 
-        bool do_dequeue(dequeue_result &res, bool bDeque)
+        bool do_dequeue(dequeue_result &res, bool bDeque, size_t id)
         {
             // Note:
             // If bDeque == false then the function is called from empty method and no real dequeuing operation is performed
@@ -465,7 +465,7 @@ namespace cds { namespace container {
                         else {
                             auto value_node = node_traits::to_value_ptr(*pNext.ptr());
                             if (bDeque) {
-                                if (value_node->m_bag.extract(res.value)) {
+                                if (value_node->m_bag.extract(res.value, id)) {
                                     res.basket_id = value_node->m_basket_id;
                                     break;
                                 } else {

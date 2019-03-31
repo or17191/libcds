@@ -58,7 +58,7 @@ namespace cds { namespace container {
                 cell.flag.store(true, atomics::memory_order_release);
                 return true;
             }
-            bool extract(T &t)
+            bool extract(T &t, size_t /*id*/)
             {
                 int real_size = m_real_size.load(atomics::memory_order_acquire);
                 if (real_size == NO_SIZE) {
@@ -130,7 +130,7 @@ namespace cds { namespace container {
                 std::swap(t, v.value.value);
                 return true;
             }
-            bool extract(T &t)
+            bool extract(T &t, size_t /*id*/)
             {
                 auto first = m_bag.begin();
                 auto last = m_bag.end();
@@ -174,7 +174,7 @@ namespace cds { namespace container {
             {
                 return m_bag.push(std::move(t));
             }
-            bool extract(T &t)
+            bool extract(T &t, size_t /*id*/)
             {
                 return m_bag.pop(t);
             }
