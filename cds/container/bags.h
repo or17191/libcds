@@ -69,7 +69,6 @@ namespace cds { namespace container {
                   }
                 }
                 auto idx = m_pops.fetch_add(1, atomics::memory_order_acquire);
-                assert(idx < m_size);
                 assert(real_size != NO_SIZE);
                 if(idx >= real_size) {
                   return false;

@@ -7,6 +7,7 @@ set(CDSSTRESS_QUEUE_POP stress-queue-pop)
 set(CDSSTRESS_QUEUE_POP_SOURCES
     ../main.cpp
     pop.cpp
+    sb_pop.cpp
 )
 add_executable(${CDSSTRESS_QUEUE_POP} ${CDSSTRESS_QUEUE_POP_SOURCES})
 target_link_libraries(${CDSSTRESS_QUEUE_POP} ${CDS_TEST_LIBRARIES} ${CDSSTRESS_FRAMEWORK_LIBRARY})
