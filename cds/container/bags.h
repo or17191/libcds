@@ -68,8 +68,8 @@ namespace cds { namespace container {
                     real_size = pushes;
                   }
                 }
-                auto idx = m_pops.fetch_add(1, atomics::memory_order_acquire);
                 assert(real_size != NO_SIZE);
+                auto idx = m_pops.fetch_add(1, atomics::memory_order_acq_rel);
                 if(idx >= real_size) {
                   return false;
                 }
