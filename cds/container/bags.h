@@ -12,6 +12,13 @@
 
 namespace cds { namespace container {
     namespace bags {
+        inline void delay(size_t s) {
+          volatile int x;
+          for(size_t i = 0; i < s; ++i) {
+            x = 0;
+          }
+        }
+
         template <class T>
         struct PaddedValue
         {
@@ -44,11 +51,32 @@ namespace cds { namespace container {
             SimpleBag(size_t ids) : m_size(ids) {
               assert(m_size <= MAX_THREADS);
             }
+
+            void reset(T& t, size_t /*id*/) {
+              assert(m_pushes.load(atomics::memory_order_relaxed) == 1);
+              assert(m_pops.load(atomics::memory_order_relaxed) == 0);
+              assert(m_real_size.load(atomics::memory_order_relaxed) == NO_SIZE);
+              auto& cell = m_bag[0].value;
+              assert(cell.flag.load(atomics::memory_order_relaxed) == true);
+              std::swap(t, cell.value);
+              cell.flag.store(false, atomics::memory_order_relaxed);
+              m_pushes.store(0, atomics::memory_order_relaxed);
+            }
+
             bool insert(T &t, size_t /*id*/)
             {
                 auto idx = m_pushes.fetch_add(1, atomics::memory_order_acq_rel);
                 assert(idx < m_size);
-                auto real_size = m_real_size.load(atomics::memory_order_acquire);
+                int real_size = m_real_size.load(atomics::memory_order_acquire);
+                if (real_size == NO_SIZE) {
+                  auto pops = m_pops.load(atomics::memory_order_acquire);
+                  if (pops != 0) {
+                    // If pops happen, read until you have size. Otherwise, read once.
+                    while((real_size = m_real_size.load(atomics::memory_order_acquire)) == NO_SIZE) {
+                      delay(10);
+                    }
+                  }
+                }
                 if (real_size != NO_SIZE && real_size <= idx) {
                   return false;
                 }
@@ -60,16 +88,19 @@ namespace cds { namespace container {
             }
             bool extract(T &t, size_t /*id*/)
             {
-                int real_size = m_real_size.load(atomics::memory_order_acquire);
-                if (real_size == NO_SIZE) {
+                auto idx = m_pops.fetch_add(1, atomics::memory_order_acq_rel);
+                int real_size;
+                if (idx == 0) {
                   auto pushes = m_pushes.load(atomics::memory_order_acquire);
                   assert(pushes <= m_size);
-                  if(m_real_size.compare_exchange_strong(real_size, pushes, atomics::memory_order_acq_rel)) {
-                    real_size = pushes;
+                  m_real_size.store(pushes, atomics::memory_order_release);
+                  real_size = pushes;
+                } else {
+                  while((real_size = m_real_size.load(atomics::memory_order_acquire)) == NO_SIZE) {
+                    delay(10);
                   }
                 }
                 assert(real_size != NO_SIZE);
-                auto idx = m_pops.fetch_add(1, atomics::memory_order_acq_rel);
                 if(idx >= real_size) {
                   return false;
                 }
@@ -143,6 +174,15 @@ namespace cds { namespace container {
                 return true;
             }
 
+            void reset(T &t, size_t id)
+            {
+                assert(id < m_size);
+                auto &v = m_bag[id];
+                assert(v.value.flag == true);
+                v.value.flag = false;
+                std::swap(t, v.value.value);
+            }
+
             bool empty() const
             {
                 return std::none_of(m_bag.begin(), m_bag.end(),
@@ -177,6 +217,13 @@ namespace cds { namespace container {
             bool extract(T &t, size_t /*id*/)
             {
                 return m_bag.pop(t);
+            }
+
+            void reset(T &t, size_t /*id*/)
+            {
+                auto res = m_bag.pop(t);
+                (void)res;
+                assert(res);
             }
 
             bool empty() const
