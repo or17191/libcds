@@ -209,6 +209,7 @@ namespace cds { namespace intrusive {
         };
 
         /// Atomics based insert policy
+        template <size_t LATENCY = 10>
         struct atomics_insert {
           static inline void delay(size_t s) {
             volatile int x;
@@ -221,7 +222,6 @@ namespace cds { namespace intrusive {
 
           template <class MemoryModel, class MarkedPtr>
           static InsertResult _(MarkedPtr old_node, MarkedPtr new_node, MarkedPtr& next_value, size_t thread_count = 1) {
-            constexpr size_t LATENCY = 10;
             new_node->m_pNext.store(MarkedPtr{}, MemoryModel::memory_order_relaxed);
             MarkedPtr pNext = old_node->m_pNext.load(MemoryModel::memory_order_relaxed);
             if (pNext.ptr() != nullptr) {
@@ -268,7 +268,7 @@ namespace cds { namespace intrusive {
             */
             typedef opt::v::relaxed_ordering        memory_model;
 
-            typedef atomics_insert    insert_policy;
+            typedef atomics_insert<>    insert_policy;
 
             /// Link checking, see \p cds::opt::link_checker
             static constexpr const opt::link_check_type link_checker = opt::debug_check_link;

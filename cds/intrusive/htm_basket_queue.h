@@ -14,20 +14,12 @@
 namespace cds { namespace intrusive {
 
     namespace htm_basket_queue {
-      struct htm_insert {
-        static inline void delay(size_t s) {
-          volatile int x;
-          for(size_t i = 0; i < s; ++i) {
-            x = 0;
-          }
-        }
 
-        using InsertResult = basket_queue::atomics_insert::InsertResult;
-
+      template<size_t LATENCY=10, size_t FINAL_LATENCY=50, size_t PATIENCE=10>
+      struct htm_insert : basket_queue::atomics_insert<> {
+        static constexpr bool IS_HTM = true;
         template <class MemoryModel, class MarkedPtr>
         static InsertResult _(MarkedPtr old_node, MarkedPtr new_node, MarkedPtr& new_value, size_t thread_count = 1) {
-          constexpr size_t LATENCY = 10;
-          constexpr size_t PATIENCE = 10;
           new_node->m_pNext.store(MarkedPtr{}, MemoryModel::memory_order_relaxed);
           auto& old = old_node->m_pNext;
           int ret;
@@ -49,14 +41,14 @@ namespace cds { namespace intrusive {
               return InsertResult::NOT_NULL;
             }
             if ((ret & _XABORT_CONFLICT) != 0) {
-              delay(50);
+              delay(FINAL_LATENCY);
               for(size_t i = 0; i < PATIENCE; ++ i) {
                 auto value = old.load(MemoryModel::memory_order_relaxed);
                 if(value.ptr() != nullptr) {
                   new_value = value;
                   return InsertResult::FAILED_INSERT;
                 }
-                delay(50);
+                delay(FINAL_LATENCY);
               }
             }
           } while (true);
@@ -64,16 +56,16 @@ namespace cds { namespace intrusive {
         }
       };
 
-      struct traits : opt::insert_policy<htm_insert>::template pack<basket_queue::traits> {};
+      struct traits : opt::insert_policy<htm_insert<>>::template pack<basket_queue::traits> {};
     }
 
     template <typename GC, typename T, typename Traits = htm_basket_queue::traits>
-    class HTMBasketQueue: public BasketQueue<GC, T, opt::insert_policy<htm_basket_queue::htm_insert>::template pack<Traits>> {
+    class HTMBasketQueue: public BasketQueue<GC, T, opt::insert_policy<htm_basket_queue::htm_insert<>>::template pack<Traits>> {
     private:
-      typedef BasketQueue<GC, T, opt::insert_policy<htm_basket_queue::htm_insert>::template pack<Traits>> base_type;
+      typedef BasketQueue<GC, T, opt::insert_policy<htm_basket_queue::htm_insert<>>::template pack<Traits>> base_type;
     public:
       using base_type::base_type;
-      static_assert(std::is_same<typename base_type::insert_policy, htm_basket_queue::htm_insert>::value, "Must use htm_insert");
+      static_assert(base_type::insert_policy::IS_HTM, "Must use htm_insert");
     };
 
 }} // namespace cds::intrusive

@@ -188,7 +188,7 @@ namespace {
     using SBStackBasketQueue_HP = cds::container::SBBasketQueue<gc_type, value_type, StackBag>;
 
     struct htm_traits : cds::container::sb_basket_queue::traits {
-      typedef cds::intrusive::htm_basket_queue::htm_insert insert_policy;
+      typedef cds::intrusive::htm_basket_queue::htm_insert<> insert_policy;
     };
 
     using HTMSBSimpleBasketQueue_HP = cds::container::SBBasketQueue<gc_type, value_type, SimpleBag, htm_traits>;

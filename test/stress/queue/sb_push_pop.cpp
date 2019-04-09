@@ -392,7 +392,7 @@ namespace {
     // CDSSTRESS_Queue_F( simple_sb_queue_push_pop, SBStackBasketQueue_HP )
 
     struct htm_traits : cds::container::sb_basket_queue::traits {
-      typedef cds::intrusive::htm_basket_queue::htm_insert insert_policy;
+      typedef cds::intrusive::htm_basket_queue::htm_insert<> insert_policy;
     };
 
     template <class Fixture>

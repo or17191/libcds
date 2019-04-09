@@ -21,19 +21,19 @@ namespace cds { namespace container {
     namespace htm_basket_queue {
 
         /// HTMBasketQueue default type traits
-        struct traits : ci::opt::insert_policy<ci::htm_basket_queue::htm_insert>::template pack<basket_queue::traits> {};
+        struct traits : ci::opt::insert_policy<ci::htm_basket_queue::htm_insert<>>::template pack<basket_queue::traits> {};
 
     } // namespace htm_basket_queue
 
     //@cond
 
     template <typename GC, typename T, typename Traits = htm_basket_queue::traits >
-    class HTMBasketQueue: public BasketQueue<GC, T, opt::insert_policy<ci::htm_basket_queue::htm_insert>::template pack<Traits>> {
+    class HTMBasketQueue: public BasketQueue<GC, T, opt::insert_policy<ci::htm_basket_queue::htm_insert<>>::template pack<Traits>> {
     private:
-      typedef BasketQueue<GC, T, opt::insert_policy<ci::htm_basket_queue::htm_insert>::template pack<Traits>> base_type;
+      typedef BasketQueue<GC, T, opt::insert_policy<ci::htm_basket_queue::htm_insert<>>::template pack<Traits>> base_type;
     public:
       using base_type::base_type;
-      static_assert(std::is_same<typename base_type::insert_policy, cds::intrusive::htm_basket_queue::htm_insert>::value, "Must use htm_insert");
+      static_assert(base_type::insert_policy::IS_HTM, "Must use htm_insert");
     };
 
 }}  // namespace cds::container
