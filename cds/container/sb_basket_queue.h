@@ -164,18 +164,19 @@ namespace cds { namespace container {
         //@endcond
 
     private:
-        struct padded_ptr
+        struct thread_data
         {
             scoped_node_ptr node;
-            typename opt::details::apply_padding<scoped_node_ptr, traits::padding>::padding_type pad1_;
+            cds::uuid_type last_node = 0;
+            char pad1_[cds::c_nCacheLineSize - sizeof(scoped_node_ptr) - sizeof(cds::uuid_type)];
         };
-        std::unique_ptr<padded_ptr[]> m_nodes_cache;
+        std::unique_ptr<thread_data[]> m_nodes_cache;
 
     public:
         /// Initializes empty queue
         SBBasketQueue(size_t ids)
             : m_Dummy(ids), m_ids(ids),
-              m_nodes_cache(new padded_ptr[m_ids]())
+              m_nodes_cache(new thread_data[m_ids]())
         {
         }
 
@@ -214,7 +215,7 @@ namespace cds { namespace container {
         template <class Arg>
         bool enqueue(Arg &&val, size_t id)
         {
-            auto &p = m_nodes_cache[id].node;
+            auto &p = m_nodes_cache[id];
             if (do_enqueue(p, std::forward<Arg>(val), id)) {
                 return true;
             }
@@ -286,8 +287,9 @@ namespace cds { namespace container {
 
     private:
         template <class Arg>
-        bool do_enqueue(scoped_node_ptr &node_ptr, Arg &&tmp_val, size_t id)
+        bool do_enqueue(thread_data &th, Arg &&tmp_val, size_t id)
         {
+            auto& node_ptr = th.node;
             value_type val(std::forward<Arg>(tmp_val));
             if(!node_ptr) {
               node_ptr.reset(alloc_node());
@@ -314,6 +316,8 @@ namespace cds { namespace container {
                     node_ptr.release();
                     if (!m_pTail.compare_exchange_strong(t, marked_ptr(pNew), memory_model::memory_order_release, atomics::memory_order_relaxed))
                         m_Stat.onAdvanceTailFailed();
+                    if(!(th.last_node != node->m_basket_id)) { throw std::logic_error("My bag"); };
+                    th.last_node = node->m_basket_id;
                     break;
                 }
                 // Get the value back.
@@ -330,7 +334,14 @@ namespace cds { namespace container {
                     //if ( m_pTail.load( memory_model::memory_order_relaxed ) == t &&
                     if (t->m_pNext.load(memory_model::memory_order_relaxed) == pNext && !pNext.bits()) {
                         bkoff();
-                        if (node_traits::to_value_ptr(pNext.ptr())->m_bag.insert(val, id)) {
+                        auto node = node_traits::to_value_ptr(pNext.ptr());
+                        if(!(th.last_node != node->m_basket_id)) {
+                          std::stringstream s;
+                          s << "Other bag " << th.last_node << ' ' << node->m_basket_id << std::endl;
+                          throw std::logic_error(s.str());
+                        };
+                        th.last_node = node->m_basket_id;
+                        if (node->m_bag.insert(val, id)) {
                             m_Stat.onAddBasket();
                             break;
                         } else {
