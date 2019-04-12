@@ -7,6 +7,7 @@
 #define CDSLIB_INTRUSIVE_HTM_BASKET_QUEUE_H
 
 #include <type_traits>
+#include <sstream>
 
 #include <cds/intrusive/basket_queue.h>
 #include <cds/sync/htm.h>
@@ -37,14 +38,22 @@ namespace cds { namespace intrusive {
               return InsertResult::SUCCESSFUL_INSERT;
             }
             if ((ret & _XABORT_EXPLICIT) != 0) {
+              if(_XABORT_CODE(ret) != 0x01) {
+                throw std::logic_error("Bad abort code");
+              }
               new_value = old.load(MemoryModel::memory_order_acquire);
               return InsertResult::NOT_NULL;
             }
             if ((ret & _XABORT_CONFLICT) != 0) {
               delay(FINAL_LATENCY);
               for(size_t i = 0; i < PATIENCE; ++ i) {
-                auto value = old.load(MemoryModel::memory_order_relaxed);
+                auto value = old.load(MemoryModel::memory_order_acquire);
                 if(value.ptr() != nullptr) {
+                  if(value.ptr() == old_snapshot.ptr()) {
+                    std::stringstream s;
+                    s << "Bad update " << ret << ' ' << value.all() << ' ' << old_snapshot.all();
+                    throw std::logic_error(s.str());
+                  }
                   new_value = value;
                   return InsertResult::FAILED_INSERT;
                 }
