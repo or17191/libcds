@@ -23,6 +23,12 @@ namespace cds { namespace intrusive {
         static InsertResult _(MarkedPtr old_node, MarkedPtr new_node, MarkedPtr& new_value, size_t thread_count = 1) {
           new_node->m_pNext.store(MarkedPtr{}, MemoryModel::memory_order_relaxed);
           auto& old = old_node->m_pNext;
+          auto old_snapshot = old.load(MemoryModel::memory_order_acquire);
+          // This check fixes everything.
+          if (old_snapshot.ptr() != nullptr) {
+            new_value = old_snapshot;
+            return InsertResult::NOT_NULL;
+          }
           int ret;
           do {
             if ((ret = _xbegin()) == _XBEGIN_STARTED) {

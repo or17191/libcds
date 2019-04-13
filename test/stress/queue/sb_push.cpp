@@ -261,8 +261,12 @@ namespace {
       typedef cds::intrusive::htm_basket_queue::htm_insert<> insert_policy;
     };
 
+    struct htm_id_traits : cds::container::sb_basket_queue::traits {
+      typedef cds::intrusive::htm_basket_queue::htm_insert<7, 15> insert_policy;
+    };
+
     using HTMSBSimpleBasketQueue_HP = cds::container::SBBasketQueue<gc_type, value_type, SimpleBag, htm_traits>;
-    using HTMSBIdBasketQueue_HP = cds::container::SBBasketQueue<gc_type, value_type, IdBag, htm_traits>;
+    using HTMSBIdBasketQueue_HP = cds::container::SBBasketQueue<gc_type, value_type, IdBag, htm_id_traits>;
     using HTMSBStackBasketQueue_HP = cds::container::SBBasketQueue<gc_type, value_type, StackBag, htm_traits>;
 
     static_assert(std::is_same<HTMSBSimpleBasketQueue_HP::insert_policy, htm_traits::insert_policy>::value, "Use htm");
