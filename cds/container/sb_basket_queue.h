@@ -335,11 +335,11 @@ namespace cds { namespace container {
                     if (t->m_pNext.load(memory_model::memory_order_relaxed) == pNext && !pNext.bits()) {
                         bkoff();
                         auto node = node_traits::to_value_ptr(pNext.ptr());
-                        if(!(th.last_node != node->m_basket_id)) {
-                          std::stringstream s;
-                          s << "Other bag " << th.last_node << ' ' << node->m_basket_id << std::endl;
-                          throw std::logic_error(s.str());
-                        };
+                        // if(!(th.last_node != node->m_basket_id)) {
+                        //   std::stringstream s;
+                        //   s << "Other bag " << th.last_node << ' ' << node->m_basket_id << std::endl;
+                        //   throw std::logic_error(s.str());
+                        // };
                         th.last_node = node->m_basket_id;
                         if (node->m_bag.insert(val, id)) {
                             m_Stat.onAddBasket();

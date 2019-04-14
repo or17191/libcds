@@ -23,12 +23,6 @@ namespace cds { namespace intrusive {
         static InsertResult _(MarkedPtr old_node, MarkedPtr new_node, MarkedPtr& new_value, size_t thread_count = 1) {
           new_node->m_pNext.store(MarkedPtr{}, MemoryModel::memory_order_relaxed);
           auto& old = old_node->m_pNext;
-          auto old_snapshot = old.load(MemoryModel::memory_order_acquire);
-          // This check fixes everything.
-          if (old_snapshot.ptr() != nullptr) {
-            new_value = old_snapshot;
-            return InsertResult::NOT_NULL;
-          }
           int ret;
           do {
             if ((ret = _xbegin()) == _XBEGIN_STARTED) {
@@ -37,7 +31,11 @@ namespace cds { namespace intrusive {
                 _xabort(0x01);
               }
               delay(LATENCY * thread_count);
-              old.store(new_node, MemoryModel::memory_order_relaxed);
+              int ret2;
+              if ((ret2 = _xbegin()) == _XBEGIN_STARTED) {
+                old.store(new_node, MemoryModel::memory_order_relaxed);
+                _xend();
+              }
               _xend();
             }
             if (ret == _XBEGIN_STARTED) {
@@ -50,21 +48,12 @@ namespace cds { namespace intrusive {
               new_value = old.load(MemoryModel::memory_order_acquire);
               return InsertResult::NOT_NULL;
             }
-            if ((ret & _XABORT_CONFLICT) != 0) {
-              delay(FINAL_LATENCY);
-              for(size_t i = 0; i < PATIENCE; ++ i) {
-                auto value = old.load(MemoryModel::memory_order_acquire);
-                if(value.ptr() != nullptr) {
-                  if(value.ptr() == old_snapshot.ptr()) {
-                    std::stringstream s;
-                    s << "Bad update " << ret << ' ' << value.all() << ' ' << old_snapshot.all();
-                    throw std::logic_error(s.str());
-                  }
-                  new_value = value;
-                  return InsertResult::FAILED_INSERT;
-                }
-                delay(FINAL_LATENCY);
+            if ((ret & _XABORT_CONFLICT) != 0 && (ret & _XABORT_NESTED) == 0) {
+              new_value = old.load(MemoryModel::memory_order_acquire);
+              if (new_value.ptr() == nullptr) {
+                continue;
               }
+              return InsertResult::FAILED_INSERT;
             }
           } while (true);
           __builtin_unreachable();
