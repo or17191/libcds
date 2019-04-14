@@ -20,24 +20,24 @@ namespace cds { namespace intrusive {
       struct htm_insert : basket_queue::atomics_insert<> {
         static constexpr bool IS_HTM = true;
         template <class MemoryModel, class MarkedPtr>
-        static InsertResult _(MarkedPtr old_node, MarkedPtr new_node, MarkedPtr& new_value, size_t thread_count = 1) {
-          new_node->m_pNext.store(MarkedPtr{}, MemoryModel::memory_order_relaxed);
+        static InsertResult __attribute__((optimize("02"))) _(MarkedPtr old_node, MarkedPtr new_node, MarkedPtr& new_value, size_t thread_count = 1) {
+          new_node->m_pNext.store(MarkedPtr{}, std::memory_order_seq_cst);
           auto& old = old_node->m_pNext;
-          auto old_snapshot = old.load(MemoryModel::memory_order_acquire);
+          auto old_snapshot = old.load(std::memory_order_seq_cst);
           // This check fixes everything.
-          if (old_snapshot.ptr() != nullptr) {
-            new_value = old_snapshot;
-            return InsertResult::NOT_NULL;
-          }
+          //if (old_snapshot.ptr() != nullptr) {
+          //  new_value = old_snapshot;
+          //  return InsertResult::NOT_NULL;
+          //}
           int ret;
-          do {
+          while(true) {
             if ((ret = _xbegin()) == _XBEGIN_STARTED) {
-              MarkedPtr pNext = old.load(MemoryModel::memory_order_relaxed);
+              MarkedPtr pNext = old.load(std::memory_order_seq_cst);
               if (pNext.ptr() != nullptr) {
                 _xabort(0x01);
               }
               delay(LATENCY * thread_count);
-              old.store(new_node, MemoryModel::memory_order_relaxed);
+              old.store(new_node, std::memory_order_release);
               _xend();
             }
             if (ret == _XBEGIN_STARTED) {
@@ -45,15 +45,22 @@ namespace cds { namespace intrusive {
             }
             if ((ret & _XABORT_EXPLICIT) != 0) {
               if(_XABORT_CODE(ret) != 0x01) {
-                throw std::logic_error("Bad abort code");
+                std::stringstream s;
+                s << "Bad abort code " << _XABORT_CODE(ret) << ' ' << old_snapshot.all();
+                throw std::logic_error(s.str());
               }
-              new_value = old.load(MemoryModel::memory_order_acquire);
+              new_value = old.load(std::memory_order_seq_cst);
               return InsertResult::NOT_NULL;
+            }
+            if (old_snapshot.ptr() != nullptr) {
+                std::stringstream s;
+                s << "Missed snapshot with " << std::hex << ret << ' ' << old_snapshot.ptr() << std::endl;
+                throw std::logic_error(s.str());
             }
             if ((ret & _XABORT_CONFLICT) != 0) {
               delay(FINAL_LATENCY);
               for(size_t i = 0; i < PATIENCE; ++ i) {
-                auto value = old.load(MemoryModel::memory_order_acquire);
+                auto value = old.load(std::memory_order_acquire);
                 if(value.ptr() != nullptr) {
                   if(value.ptr() == old_snapshot.ptr()) {
                     std::stringstream s;
@@ -66,7 +73,7 @@ namespace cds { namespace intrusive {
                 delay(FINAL_LATENCY);
               }
             }
-          } while (true);
+          }
           __builtin_unreachable();
         }
       };
