@@ -24,6 +24,8 @@ namespace cds { namespace intrusive {
           new_node->m_pNext.store(MarkedPtr{}, std::memory_order_relaxed);
           auto& old = old_node->m_pNext;
           int ret, ret2;
+          bool might_be_not_null = true;
+          const size_t latency = thread_count * LATENCY;
           MarkedPtr pNext;
           while(true) {
             if ((ret = _xbegin()) == _XBEGIN_STARTED) {
@@ -34,8 +36,11 @@ namespace cds { namespace intrusive {
                 }
                 _xend();
               }
-              delay(LATENCY * thread_count);
-              old.store(new_node, std::memory_order_relaxed);
+              delay(latency);
+              if(_xbegin() == _XBEGIN_STARTED) {
+                old.store(new_node, std::memory_order_relaxed);
+                _xend();
+              }
               _xend();
             }
             if (ret == 0) {
@@ -51,11 +56,16 @@ namespace cds { namespace intrusive {
                 throw std::logic_error(s.str());
               }
               new_value = old.load(std::memory_order_acquire);
-              return InsertResult::NOT_NULL;
+              if (might_be_not_null) {
+                return InsertResult::NOT_NULL;
+              } else {
+                return InsertResult::FAILED_INSERT;
+              }
             }
-            bool is_conflict = (ret & _XABORT_CONFLICT) != 0;
-            bool is_nested = (ret & _XABORT_NESTED) != 0;
+            const bool is_conflict = (ret & _XABORT_CONFLICT) != 0;
+            const bool is_nested = (ret & _XABORT_NESTED) != 0;
             if (is_conflict && !is_nested) {
+              might_be_not_null = false;
               delay(FINAL_LATENCY);
               for(size_t p = 0; p < PATIENCE; ++ p) {
                 auto value = old.load(std::memory_order_acquire);
