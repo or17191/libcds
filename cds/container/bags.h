@@ -135,8 +135,8 @@ namespace cds { namespace container {
         private:
             struct value
             {
-                T value;
-                bool flag;
+                T value{};
+                bool flag{false};
             };
             using value_type = PaddedValue<value>;
             static constexpr size_t MAX_THREADS=40;
@@ -148,9 +148,6 @@ namespace cds { namespace container {
             IdBag(size_t ids) : m_size(ids)
             {
                 assert(m_size <= MAX_THREADS);
-                for (size_t i = 0; i < m_size; ++i) {
-                    m_bag[i].value.flag = false;
-                }
             }
             bool insert(T &t, size_t id)
             {

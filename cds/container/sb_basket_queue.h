@@ -166,8 +166,8 @@ namespace cds { namespace container {
     private:
         struct thread_data
         {
-            scoped_node_ptr node;
-            cds::uuid_type last_node = 0;
+            scoped_node_ptr node{nullptr};
+            cds::uuid_type last_node{0};
             char pad1_[cds::c_nCacheLineSize - sizeof(scoped_node_ptr) - sizeof(cds::uuid_type)];
         };
         std::unique_ptr<thread_data[]> m_nodes_cache;
@@ -178,6 +178,7 @@ namespace cds { namespace container {
             : m_Dummy(ids), m_ids(ids),
               m_nodes_cache(new thread_data[m_ids]())
         {
+          m_Dummy.m_basket_id = static_cast<cds::uuid_type>(-1);
         }
 
         /// Destructor clears the queue
@@ -294,7 +295,8 @@ namespace cds { namespace container {
             if(!node_ptr) {
               node_ptr.reset(alloc_node());
               assert(node_ptr.get() != nullptr);
-              node_ptr->m_basket_id = uuid();
+              constexpr cds::uuid_type MASK = ~cds::uuid_type{} << CHAR_BIT;
+              node_ptr->m_basket_id = (uuid() & MASK) + id;
             }
             base_node_type* pNew = node_traits::to_node_ptr(node_ptr.get());
             link_checker::is_empty(pNew);
@@ -307,46 +309,44 @@ namespace cds { namespace container {
             while (true) {
                 t = guard.protect(m_pTail, [](marked_ptr p) -> node_type * { return node_traits::to_value_ptr(p.ptr()); });
 
-                auto insert_res = node_ptr->m_bag.insert(val, id);
-                assert(insert_res);
                 auto res = insert_policy::template _<memory_model>(t, marked_ptr(pNew), pNext, m_ids);
 
                 if ( res == insert_policy::InsertResult::SUCCESSFUL_INSERT) {
-                    auto node = node_ptr.get();
                     node_ptr.release();
                     if (!m_pTail.compare_exchange_strong(t, marked_ptr(pNew), memory_model::memory_order_release, atomics::memory_order_relaxed))
                         m_Stat.onAdvanceTailFailed();
-                    if(!(th.last_node != node->m_basket_id)) { throw std::logic_error("My bag"); };
-                    th.last_node = node->m_basket_id;
-                    break;
-                }
-                // Get the value back.
-                node_ptr->m_bag.reset(val, id);
-
-                if ( res == insert_policy::InsertResult::FAILED_INSERT ) {
+                    auto node = node_traits::to_value_ptr(t.ptr());
+                    if(th.last_node == node->m_basket_id) {
+                      std::stringstream s;
+                      s << "My bag " << std::hex << th.last_node << ' ' << node->m_basket_id << ' ' << id << std::endl;
+                      throw std::logic_error(s.str());
+                    };
+                    if (node->m_bag.insert(val, id)) {
+                        th.last_node = node->m_basket_id;
+                        break;
+                    } else {
+                        continue;
+                    }
+                } else if ( res == insert_policy::InsertResult::FAILED_INSERT ) {
                     // Try adding to basket
                     m_Stat.onTryAddBasket();
 
-                    // Reread tail next
-                    pNext = gNext.protect(t->m_pNext, [](marked_ptr p) -> node_type * { return node_traits::to_value_ptr(p.ptr()); });
+                    assert(t->m_pNext.load(memory_model::memory_order_relaxed) == pNext && !pNext.bits());
 
                     // add to the basket
-                    //if ( m_pTail.load( memory_model::memory_order_relaxed ) == t &&
-                    if (t->m_pNext.load(memory_model::memory_order_relaxed) == pNext && !pNext.bits()) {
-                        bkoff();
-                        auto node = node_traits::to_value_ptr(pNext.ptr());
-                        if(!(th.last_node != node->m_basket_id)) {
-                          std::stringstream s;
-                          s << "Other bag " << th.last_node << ' ' << node->m_basket_id << std::endl;
-                          throw std::logic_error(s.str());
-                        };
+                    bkoff();
+                    auto node = node_traits::to_value_ptr(t.ptr());
+                    if(th.last_node == node->m_basket_id) {
+                      std::stringstream s;
+                      s << "Other bag " << std::hex << th.last_node << ' ' << node->m_basket_id << ' ' << id << std::endl;
+                      throw std::logic_error(s.str());
+                    };
+                    if (node->m_bag.insert(val, id)) {
+                        m_Stat.onAddBasket();
                         th.last_node = node->m_basket_id;
-                        if (node->m_bag.insert(val, id)) {
-                            m_Stat.onAddBasket();
-                            break;
-                        } else {
-                            continue;
-                        }
+                        break;
+                    } else {
+                        continue;
                     }
                 } else {
                     // Tail is misplaced, advance it
@@ -471,7 +471,7 @@ namespace cds { namespace container {
                         if (iter.ptr() == t.ptr())
                             free_chain(h, iter);
                         else {
-                            auto value_node = node_traits::to_value_ptr(*pNext.ptr());
+                            auto value_node = node_traits::to_value_ptr(*iter.ptr());
                             if (bDeque) {
                                 if (value_node->m_bag.extract(res.value, id)) {
                                     res.basket_id = value_node->m_basket_id;
