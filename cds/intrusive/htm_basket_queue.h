@@ -19,8 +19,10 @@ namespace cds { namespace intrusive {
       template<size_t LATENCY=10, size_t FINAL_LATENCY=50, size_t PATIENCE=10>
       struct htm_insert : basket_queue::atomics_insert<> {
         static constexpr bool IS_HTM = true;
-        template <class MemoryModel, class MarkedPtr>
-        static InsertResult _(MarkedPtr old_node, MarkedPtr new_node, MarkedPtr& new_value, size_t thread_count = 1) {
+        static constexpr size_t latency = LATENCY;
+        static constexpr size_t final_latency = FINAL_LATENCY;
+        template <class MemoryModel, class MarkedPtr, class CheckNext = std::true_type>
+        static InsertResult _(MarkedPtr old_node, MarkedPtr new_node, MarkedPtr& new_value, size_t thread_count = 1, CheckNext = {}) {
           new_node->m_pNext.store(MarkedPtr{}, std::memory_order_relaxed);
           auto& old = old_node->m_pNext;
           int ret, ret2;

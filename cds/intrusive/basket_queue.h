@@ -209,7 +209,7 @@ namespace cds { namespace intrusive {
         };
 
         /// Atomics based insert policy
-        template <size_t LATENCY = 10>
+        template <size_t LATENCY = 10, size_t FINAL_LATENCY=50>
         struct atomics_insert {
           static inline void delay(size_t s) {
             volatile int x;
@@ -218,7 +218,10 @@ namespace cds { namespace intrusive {
             }
           }
 
-          enum class InsertResult : uint8_t { NOT_NULL, FAILED_INSERT, SUCCESSFUL_INSERT };
+          static constexpr size_t latency = LATENCY;
+          static constexpr size_t final_latency = FINAL_LATENCY;
+
+          enum class InsertResult : uint8_t { NOT_NULL=0, FAILED_INSERT=1, SUCCESSFUL_INSERT=2 };
 
           template <class MemoryModel, class MarkedPtr>
           static InsertResult _(MarkedPtr old_node, MarkedPtr new_node, MarkedPtr& next_value, size_t thread_count = 1) {
@@ -231,13 +234,20 @@ namespace cds { namespace intrusive {
             }
             delay(LATENCY * thread_count);
             bool res = old.compare_exchange_strong(pNext, new_node, MemoryModel::memory_order_release, MemoryModel::memory_order_relaxed);
-            assert(old.load(MemoryModel::memory_order_acquire).ptr() != nullptr);
             if (!res) {
               next_value = pNext;
               return InsertResult::FAILED_INSERT;
             } else {
               return InsertResult::SUCCESSFUL_INSERT;
             }
+          }
+          template <class MemoryModel, class MarkedPtr>
+          static InsertResult _(MarkedPtr old_node, MarkedPtr new_node, MarkedPtr& next_value, size_t thread_count, std::false_type) {
+            return _<MemoryModel>(std::move(old_node), std::move(new_node), next_value, thread_count);
+          }
+          template <class MemoryModel, class MarkedPtr>
+          static InsertResult _(MarkedPtr old_node, MarkedPtr new_node, MarkedPtr& next_value, size_t thread_count, std::true_type) {
+            return InsertResult::NOT_NULL;
           }
         };
 

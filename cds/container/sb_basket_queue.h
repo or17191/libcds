@@ -292,33 +292,38 @@ namespace cds { namespace container {
         {
             auto& node_ptr = th.node;
             value_type val(std::forward<Arg>(tmp_val));
-            if(!node_ptr) {
-              node_ptr.reset(alloc_node());
-              assert(node_ptr.get() != nullptr);
-              constexpr cds::uuid_type MASK = ~cds::uuid_type{} << CHAR_BIT;
-              node_ptr->m_basket_id = (uuid() & MASK) + id;
-            }
-            base_node_type* pNew = node_traits::to_node_ptr(node_ptr.get());
-            link_checker::is_empty(pNew);
+            base_node_type* pNew{nullptr};
 
             typename gc::Guard guard;
             typename gc::Guard gNext;
             back_off bkoff;
 
-            marked_ptr t{}, pNext{};
-            while (true) {
-                t = guard.protect(m_pTail, [](marked_ptr p) -> node_type * { return node_traits::to_value_ptr(p.ptr()); });
 
-                auto res = insert_policy::template _<memory_model>(t, marked_ptr(pNew), pNext, m_ids);
+            while (true) {
+                if(!node_ptr) {
+                  node_ptr.reset(alloc_node());
+                  assert(node_ptr.get() != nullptr);
+                  constexpr cds::uuid_type MASK = ~cds::uuid_type{} << CHAR_BIT;
+                  node_ptr->m_basket_id = (uuid() & MASK) + id;
+                }
+                if(!pNew) {
+                  pNew = node_traits::to_node_ptr(node_ptr.get());
+                  link_checker::is_empty(pNew);
+                }
+                const marked_ptr t = guard.protect(m_pTail, [](marked_ptr p) -> node_type * { return node_traits::to_value_ptr(p.ptr()); });
+
+                marked_ptr pNext{};
+                auto res = insert_policy::template _<memory_model>(t, marked_ptr(pNew), pNext, m_ids, std::false_type{});
 
                 if ( res == insert_policy::InsertResult::SUCCESSFUL_INSERT) {
                     node_ptr.release();
-                    if (!m_pTail.compare_exchange_strong(t, marked_ptr(pNew), memory_model::memory_order_release, atomics::memory_order_relaxed))
-                        m_Stat.onAdvanceTailFailed();
                     auto node = node_traits::to_value_ptr(t.ptr());
+                    auto copy_t = t;
+                    if (!m_pTail.compare_exchange_strong(copy_t, marked_ptr(pNew), memory_model::memory_order_release, atomics::memory_order_relaxed))
+                        m_Stat.onAdvanceTailFailed();
                     if(th.last_node == node->m_basket_id) {
                       std::stringstream s;
-                      s << "My bag " << std::hex << th.last_node << ' ' << node->m_basket_id << ' ' << id << std::endl;
+                      s << "My bag " << std::hex << th.last_node << ' ' << node->m_basket_id;
                       throw std::logic_error(s.str());
                     };
                     if (node->m_bag.insert(val, id)) {
@@ -338,7 +343,7 @@ namespace cds { namespace container {
                     auto node = node_traits::to_value_ptr(t.ptr());
                     if(th.last_node == node->m_basket_id) {
                       std::stringstream s;
-                      s << "Other bag " << std::hex << th.last_node << ' ' << node->m_basket_id << ' ' << id << std::endl;
+                      s << "Other bag " << std::hex << th.last_node << ' ' << node->m_basket_id;
                       throw std::logic_error(s.str());
                     };
                     if (node->m_bag.insert(val, id)) {
@@ -371,7 +376,8 @@ namespace cds { namespace container {
                         pNext = p;
                         g.assign(0, g.template get<node_type>(1));
                     }
-                    if (!bTailOk || !m_pTail.compare_exchange_weak(t, marked_ptr(pNext.ptr()), memory_model::memory_order_release, atomics::memory_order_relaxed))
+                    auto copy_t = t;
+                    if (!bTailOk || !m_pTail.compare_exchange_weak(copy_t, marked_ptr(pNext.ptr()), memory_model::memory_order_release, atomics::memory_order_relaxed))
                         m_Stat.onAdvanceTailFailed();
 
                     m_Stat.onBadTail();
