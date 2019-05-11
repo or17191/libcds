@@ -67,6 +67,10 @@ namespace cds { namespace intrusive {
             const bool is_conflict = (ret & _XABORT_CONFLICT) != 0;
             const bool is_nested = (ret & _XABORT_NESTED) != 0;
             if (is_conflict && !is_nested) {
+              if (!CheckNext::value) {
+                new_value = nullptr;
+                return InsertResult::FAILED_INSERT;
+              }
               might_be_not_null = false;
               delay(FINAL_LATENCY);
               for(size_t p = 0; p < PATIENCE; ++ p) {

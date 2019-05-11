@@ -298,7 +298,6 @@ namespace cds { namespace container {
             typename gc::Guard gNext;
             back_off bkoff;
 
-
             while (true) {
                 if(!node_ptr) {
                   node_ptr.reset(alloc_node());
@@ -313,7 +312,7 @@ namespace cds { namespace container {
                 const marked_ptr t = guard.protect(m_pTail, [](marked_ptr p) -> node_type * { return node_traits::to_value_ptr(p.ptr()); });
 
                 marked_ptr pNext{};
-                auto res = insert_policy::template _<memory_model>(t, marked_ptr(pNew), pNext, m_ids, std::false_type{});
+                const auto res = insert_policy::template _<memory_model>(t, marked_ptr(pNew), pNext, m_ids);
 
                 if ( res == insert_policy::InsertResult::SUCCESSFUL_INSERT) {
                     node_ptr.release();
