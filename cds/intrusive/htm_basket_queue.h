@@ -52,11 +52,7 @@ namespace cds { namespace intrusive {
               return InsertResult::SUCCESSFUL_INSERT;
             }
             if ((ret & _XABORT_EXPLICIT) != 0) {
-              if(_XABORT_CODE(ret) != 0x01) {
-                std::stringstream s;
-                s << "Bad abort code " << _XABORT_CODE(ret);
-                throw std::logic_error(s.str());
-              }
+              assert(_XABORT_CODE(ret) == 0x01);
               new_value = old.load(std::memory_order_acquire);
               if (might_be_not_null) {
                 return InsertResult::NOT_NULL;
