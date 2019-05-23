@@ -395,13 +395,27 @@ namespace {
       typedef cds::intrusive::htm_basket_queue::htm_insert<> insert_policy;
     };
 
+    struct htm_id_traits : cds::container::sb_basket_queue::traits {
+      typedef cds::intrusive::htm_basket_queue::htm_insert<7, 15> insert_policy;
+    };
+
     template <class Fixture>
     using SBSimpleBasketQueue_HP = cds::container::SBBasketQueue<typename Fixture::gc_type, typename Fixture::value_type, SimpleBag>;
+
+    template <class Fixture>
+    using SBIdBasketQueue_HP = cds::container::SBBasketQueue<typename Fixture::gc_type, typename Fixture::value_type, IdBag>;
+
     CDSSTRESS_Queue_F( simple_sb_queue_push_pop, SBSimpleBasketQueue_HP )
+    CDSSTRESS_Queue_F( simple_sb_queue_push_pop, SBIdBasketQueue_HP)
 
     template <class Fixture>
     using HTMSBSimpleBasketQueue_HP = cds::container::SBBasketQueue<typename Fixture::gc_type, typename Fixture::value_type, SimpleBag, htm_traits>;
+
+    template <class Fixture>
+    using HTMSBIdBasketQueue_HP = cds::container::SBBasketQueue<typename Fixture::gc_type, typename Fixture::value_type, IdBag, htm_id_traits>;
+
     CDSSTRESS_Queue_F( simple_sb_queue_push_pop, HTMSBSimpleBasketQueue_HP )
+    CDSSTRESS_Queue_F( simple_sb_queue_push_pop, HTMSBIdBasketQueue_HP)
 
 #undef CDSSTRESS_Queue_F
 

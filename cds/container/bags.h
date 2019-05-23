@@ -8,6 +8,7 @@
 #include <cds/algo/atomic.h>
 #include <cds/container/treiber_stack.h>
 #include <cds/details/memkind_allocator.h>
+#include <cds/sync/htm.h>
 #include <cds/gc/hp.h>
 
 namespace cds { namespace container {
@@ -133,14 +134,18 @@ namespace cds { namespace container {
         class IdBag
         {
         private:
+            static constexpr int INSERT = 0;
+            static constexpr int EXTRACT = 1;
+            static constexpr int EMPTY = 2;
             struct value
             {
                 T value{};
-                bool flag{false};
+                std::atomic<int> flag{INSERT};
             };
             using value_type = PaddedValue<value>;
             static constexpr size_t MAX_THREADS=40;
             std::array<value_type, MAX_THREADS> m_bag;
+            PaddedValue<std::atomic<int>> status;
             size_t m_size;
 
         public:
@@ -148,47 +153,62 @@ namespace cds { namespace container {
             IdBag(size_t ids) : m_size(ids)
             {
                 assert(m_size <= MAX_THREADS);
+                status.value.store(INSERT, std::memory_order_relaxed);
             }
             bool insert(T &t, size_t id)
             {
                 assert(id < m_size);
-                auto &v = m_bag[id];
-                assert(v.value.flag == false);
-                v.value.flag = true;
-                std::swap(t, v.value.value);
+                auto &v = m_bag[id].value;
+                // if(status.value.load(std::memory_order_acquire) != INSERT) {
+                //   return false;
+                // }
+                // int old_flag = v.flag.load(std::memory_order_relaxed);
+                // if(old_flag != INSERT) {
+                //   return false;
+                // }
+                std::swap(t, v.value);
+                // if(!v.flag.compare_exchange_strong(old_flag, EXTRACT, std::memory_order_release,
+                //       std::memory_order_relaxed)) {
+                //   std::swap(t, v.value);
+                //   return false;
+                // }
+                v.flag.store(EXTRACT, std::memory_order_relaxed);
                 return true;
             }
-            bool extract(T &t, size_t /*id*/)
+            bool extract(T &t, size_t id)
             {
-                auto first = m_bag.begin();
-                auto last = m_bag.end();
-                auto it = std::find_if(first, last, [](const value_type &e) { return e.value.flag; });
-                if (it == last) {
-                    return false;
+                int current_status = status.value.load(std::memory_order_acquire);
+                if(current_status == INSERT) {
+                  if(status.value.compare_exchange_strong(current_status,
+                        EXTRACT, std::memory_order_acquire)) {
+                    current_status = EXTRACT;
+                  }
                 }
-                it->value.flag = false;
-                std::swap(t, it->value.value);
-                return true;
+                if(current_status == EMPTY) {
+                  return false;
+                }
+                assert(current_status != INSERT);
+                auto pos = std::next(m_bag.begin(), id);
+                auto last = std::next(m_bag.begin(), m_size);
+                for(size_t i = 0; i < m_size; ++i, ++pos) {
+                  if(pos == last) {
+                    pos = m_bag.begin();
+                  }
+                  auto& value = pos->value;
+                  if(value.flag.load(std::memory_order_relaxed) != EXTRACT) {
+                    continue;
+                  }
+                  auto flag = value.flag.exchange(EMPTY, std::memory_order_acquire);
+                  if(flag == EXTRACT) {
+                    std::swap(t, value.value);
+                    return true;
+                  }
+                }
+                status.value.store(EMPTY, std::memory_order_release);
+                return false;
             }
-
-            void reset(T &t, size_t id)
-            {
-                assert(id < m_size);
-                auto &v = m_bag[id];
-                assert(v.value.flag == true);
-                v.value.flag = false;
-                std::swap(t, v.value.value);
-            }
-
-            bool empty() const
-            {
-                return std::none_of(m_bag.begin(), m_bag.end(),
-                                    [](const value_type &v) { return v.value.flag; });
-            }
-            size_t size() const
-            {
-                return std::count_if(m_bag.begin(), m_bag.end(),
-                                     [](const value_type &v) { return v.value.flag; });
+            bool empty() const {
+              return status.value.load(std::memory_order_acquire) == EMPTY;
             }
         };
 

@@ -185,6 +185,8 @@ namespace {
                << std::make_pair( "system_time", times.sys )
                << std::make_pair( "user_time", times.user );
 
+            std::cout << "[ STAT     ] Duration = " << duration.count() << "ms" << std::endl;
+
             struct record {
               intmax_t writer_id;
               intmax_t number;
