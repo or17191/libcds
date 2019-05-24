@@ -159,20 +159,16 @@ namespace cds { namespace container {
             {
                 assert(id < m_size);
                 auto &v = m_bag[id].value;
-                // if(status.value.load(std::memory_order_acquire) != INSERT) {
-                //   return false;
-                // }
-                // int old_flag = v.flag.load(std::memory_order_relaxed);
-                // if(old_flag != INSERT) {
-                //   return false;
-                // }
+                if(status.value.load(std::memory_order_acquire) != INSERT) {
+                  return false;
+                }
                 std::swap(t, v.value);
-                // if(!v.flag.compare_exchange_strong(old_flag, EXTRACT, std::memory_order_release,
-                //       std::memory_order_relaxed)) {
-                //   std::swap(t, v.value);
-                //   return false;
-                // }
-                v.flag.store(EXTRACT, std::memory_order_relaxed);
+                int old_flag = INSERT;
+                if(!v.flag.compare_exchange_strong(old_flag, EXTRACT, std::memory_order_release,
+                      std::memory_order_relaxed)) {
+                  std::swap(t, v.value);
+                  return false;
+                }
                 return true;
             }
             bool extract(T &t, size_t id)

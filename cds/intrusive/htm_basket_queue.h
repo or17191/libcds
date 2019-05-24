@@ -8,6 +8,7 @@
 
 #include <type_traits>
 #include <sstream>
+#include <iostream>
 
 #include <cds/intrusive/basket_queue.h>
 #include <cds/sync/htm.h>
