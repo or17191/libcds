@@ -294,7 +294,10 @@ namespace cds { namespace container {
         }
         static bool make_deleted(marked_ptr p) {
           auto node_ptr = node_traits::to_value_ptr(p.ptr());
-          bool status = false;
+          bool status = node_ptr->deleted.load(std::memory_order_relaxed);
+          if(status != false) {
+            return false;
+          }
           return node_ptr->deleted.compare_exchange_strong(status, true, memory_model::memory_order_release, memory_model::memory_order_relaxed);
         }
         template <class Arg>
@@ -457,7 +460,7 @@ namespace cds { namespace container {
                 pNext = res.guards.protect(2, h->m_pNext, [](marked_ptr p) -> node_type * { return node_traits::to_value_ptr(p.ptr()); });
 
                 if (h == m_pHead.load(memory_model::memory_order_acquire)) {
-                    if (h.ptr() == t.ptr()) {
+                    if (cds_unlikely(h.ptr() == t.ptr())) {
                         if (!pNext.ptr()) {
                             m_Stat.onEmptyDequeue();
                             return false;
