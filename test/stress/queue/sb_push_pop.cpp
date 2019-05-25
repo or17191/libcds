@@ -425,7 +425,7 @@ namespace {
     };
 
     struct htm_id_traits : cds::container::sb_basket_queue::traits {
-      typedef cds::intrusive::htm_basket_queue::htm_insert<7, 15> insert_policy;
+      typedef cds::intrusive::htm_basket_queue::htm_insert<50, 50, 5> insert_policy;
     };
 
     template <class Fixture>

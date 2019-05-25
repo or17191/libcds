@@ -190,6 +190,11 @@ namespace cds { namespace container {
                   if(pos == last) {
                     pos = m_bag.begin();
                   }
+                  if(i % (m_size / 2) == 0 ) {
+                    if (status.value.load(std::memory_order_acquire) == EMPTY) {
+                      return false;
+                    }
+                  }
                   auto& value = pos->value;
                   if(value.flag.load(std::memory_order_relaxed) != EXTRACT) {
                     continue;
