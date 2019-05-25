@@ -100,29 +100,29 @@ namespace {
 
             virtual void test()
             {
-                auto id_ = id();
                 size_t const nPushCount = m_nPushCount;
-                s_Topology->pin_thread(id_);
+                s_Topology->pin_thread(id());
                 value_type v;
-                v.nWriterNo = id();
+                v.nWriterNo = m_nWriterId;
                 v.nNo = 0;
                 m_nPushFailed = 0;
 
                 while ( v.nNo < nPushCount ) {
-                    if ( m_Queue.push( v, id_ ))
+                    if ( m_Queue.push( v, m_nWriterId ))
                         ++v.nNo;
                     else
                         ++m_nPushFailed;
                 }
 
                 s_nProducerDone.fetch_add( 1 );
-                s_Topology->verify_pin(id_);
+                s_Topology->verify_pin(id());
             }
 
         public:
             Queue&              m_Queue;
             size_t              m_nPushFailed;
             size_t const        m_nPushCount;
+            size_t              m_nWriterId;
         };
 
         template <class Queue>
@@ -136,6 +136,7 @@ namespace {
             size_t              m_nPopEmpty;
             size_t              m_nPopped;
             size_t              m_nBadWriter;
+            size_t              m_nReaderId;
 
             typedef std::vector<size_t> popped_data;
             typedef std::vector<size_t>::iterator       data_iterator;
@@ -181,8 +182,7 @@ namespace {
 
             virtual void test()
             {
-                auto id_ = id();
-                s_Topology->pin_thread(id_);
+                s_Topology->pin_thread(id());
                 m_nPopEmpty = 0;
                 m_nPopped = 0;
                 m_nBadWriter = 0;
@@ -190,7 +190,7 @@ namespace {
                 value_type v;
                 bool writers_done = false;
                 while ( true ) {
-                    if ( m_Queue.pop( v, id_ )) {
+                    if ( m_Queue.pop( v, m_nReaderId )) {
                         ++m_nPopped;
                         if ( v.nWriterNo < nTotalWriters )
                             m_WriterData[ v.nWriterNo ].push_back( v.nNo );
@@ -205,7 +205,7 @@ namespace {
                         writers_done = s_nProducerDone.load() >= nTotalWriters;
                     }
                 }
-                s_Topology->verify_pin(id_);
+                s_Topology->verify_pin(id());
             }
         };
 
@@ -294,14 +294,35 @@ namespace {
         }
 
         template <class Queue>
-        void test_queue( Queue& q )
+        void test_queue( Queue& q, bool independent_ids )
         {
+            typedef Consumer<Queue> consumer_type;
+            typedef Producer<Queue> producer_type;
+
             m_nThreadPushCount = s_nQueueSize / s_nProducerThreadCount;
             s_nQueueSize = m_nThreadPushCount * s_nProducerThreadCount;
 
             cds_test::thread_pool& pool = get_pool();
-            pool.add( new Producer<Queue>( pool, q, m_nThreadPushCount ), s_nProducerThreadCount );
-            pool.add( new Consumer<Queue>( pool, q, m_nThreadPushCount ), s_nConsumerThreadCount );
+            pool.add( new producer_type( pool, q, m_nThreadPushCount ), s_nProducerThreadCount );
+            pool.add( new consumer_type( pool, q, m_nThreadPushCount ), s_nConsumerThreadCount );
+            size_t writer_id = 0;
+            size_t reader_id = 0;
+            for ( size_t i = 0; i < pool.size(); ++i ) {
+                cds_test::thread& thr = pool.get(i);
+                if ( thr.type() == consumer_thread ) {
+                    consumer_type& consumer = static_cast<consumer_type&>( thr );
+                    if(independent_ids) {
+                      consumer.m_nReaderId = reader_id++;
+                    } else {
+                      consumer.m_nReaderId = writer_id++;
+                    }
+                }
+                else {
+                    assert( thr.type() == producer_thread );
+                    producer_type& producer = static_cast<producer_type&>( thr );
+                    producer.m_nWriterId = writer_id++;
+                }
+            }
 
             s_nProducerDone.store( 0 );
 
@@ -312,12 +333,13 @@ namespace {
             std::chrono::milliseconds duration = pool.run();
 
             propout() << std::make_pair( "duration", duration );
+            std::cout << "[ STAT     ] Duration = " << duration.count() << "ms" << std::endl;
         }
 
         template <class Queue>
-        void test( Queue& q )
+        void test( Queue& q, bool independent_ids)
         {
-            test_queue( q );
+            test_queue( q , independent_ids);
             analyze( q );
             propout() << q.statistics();
         }
@@ -376,14 +398,21 @@ namespace {
     TEST_F( test_fixture, type_name ) \
     { \
         typedef type_name<test_fixture> queue_type; \
-        queue_type queue( s_nConsumerThreadCount + s_nProducerThreadCount ); \
-        test( queue ); \
+        ASSERT_EQ(s_nConsumerThreadCount, s_nProducerThreadCount); \
+        queue_type queue( s_nConsumerThreadCount); \
+        test( queue, true ); \
     }
 
     template <class Fixture>
     using WFQueue = cds::container::WFQueue<typename Fixture::gc_type, typename Fixture::value_type>;
 
-    CDSSTRESS_Queue_F( simple_sb_queue_push_pop, WFQueue )
+    TEST_F( simple_sb_queue_push_pop, WFQueue )
+    {
+        typedef WFQueue<simple_sb_queue_push_pop> queue_type;
+        ASSERT_EQ(s_nConsumerThreadCount, s_nProducerThreadCount);
+        queue_type queue( s_nConsumerThreadCount + s_nProducerThreadCount);
+        test( queue, false );
+    }
 
     using namespace cds::container::bags;
 
