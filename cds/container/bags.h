@@ -159,9 +159,6 @@ namespace cds { namespace container {
             {
                 assert(id < m_size);
                 auto &v = m_bag[id].value;
-                if(status.value.load(std::memory_order_acquire) != INSERT) {
-                  return false;
-                }
                 std::swap(t, v.value);
                 int old_flag = INSERT;
                 if(!v.flag.compare_exchange_strong(old_flag, EXTRACT, std::memory_order_release,
@@ -174,16 +171,9 @@ namespace cds { namespace container {
             bool extract(T &t, size_t id)
             {
                 int current_status = status.value.load(std::memory_order_acquire);
-                if(current_status == INSERT) {
-                  if(status.value.compare_exchange_strong(current_status,
-                        EXTRACT, std::memory_order_acquire)) {
-                    current_status = EXTRACT;
-                  }
-                }
                 if(current_status == EMPTY) {
                   return false;
                 }
-                assert(current_status != INSERT);
                 auto pos = std::next(m_bag.begin(), id);
                 auto last = std::next(m_bag.begin(), m_size);
                 for(size_t i = 0; i < m_size; ++i, ++pos) {
