@@ -196,7 +196,7 @@ namespace cds { namespace container {
                     }
                   }
                   auto& value = pos->value;
-                  if(value.flag.load(std::memory_order_relaxed) != EXTRACT) {
+                  if(value.flag.load(std::memory_order_relaxed) == EMPTY) {
                     continue;
                   }
                   auto flag = value.flag.exchange(EMPTY, std::memory_order_acquire);
