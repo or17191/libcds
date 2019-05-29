@@ -163,6 +163,7 @@ namespace cds { namespace container {
                 int old_flag = INSERT;
                 if(!v.flag.compare_exchange_strong(old_flag, EXTRACT, std::memory_order_release,
                       std::memory_order_relaxed)) {
+                  // This scenario is neglegible
                   std::swap(t, v.value);
                   return false;
                 }
@@ -187,13 +188,19 @@ namespace cds { namespace container {
                   }
                   auto& value = pos->value;
                   if(value.flag.load(std::memory_order_relaxed) == EMPTY) {
+                    // This is pretty significant
                     continue;
                   }
                   auto flag = value.flag.exchange(EMPTY, std::memory_order_acquire);
+                  // We still get a lot of EMPTYs here
                   if(flag == EXTRACT) {
                     std::swap(t, value.value);
                     return true;
                   }
+                }
+                current_status = status.value.load(std::memory_order_relaxed);
+                if(current_status == EMPTY) {
+                  return false;
                 }
                 status.value.store(EMPTY, std::memory_order_release);
                 return false;
