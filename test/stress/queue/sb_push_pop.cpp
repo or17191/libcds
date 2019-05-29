@@ -50,9 +50,11 @@ namespace {
     static size_t s_nConsumerThreadCount = 4;
     static size_t s_nProducerThreadCount = 4;
     static size_t s_nQueueSize = 4000000;
+    static size_t s_nPreStoreSize = 0;
     static size_t s_nHeavyValueSize = 100;
 
     static std::atomic<size_t> s_nProducerDone( 0 );
+    static std::atomic<size_t> s_nPreStoreDone( 0 );
 
     struct old_value
     {
@@ -79,11 +81,12 @@ namespace {
             typedef cds_test::thread base_class;
 
         public:
-            Producer( cds_test::thread_pool& pool, Queue& queue, size_t nPushCount )
+            Producer( cds_test::thread_pool& pool, Queue& queue, size_t nPushCount, size_t nPreStoreSize )
                 : base_class( pool, producer_thread )
                 , m_Queue( queue )
                 , m_nPushFailed( 0 )
                 , m_nPushCount( nPushCount )
+                , m_nPreStoreSize( nPreStoreSize )
             {}
 
             Producer( Producer& src )
@@ -91,6 +94,7 @@ namespace {
                 , m_Queue( src.m_Queue )
                 , m_nPushFailed( 0 )
                 , m_nPushCount( src.m_nPushCount )
+                , m_nPreStoreSize( src.m_nPreStoreSize )
             {}
 
             virtual thread * clone()
@@ -107,11 +111,20 @@ namespace {
                 v.nNo = 0;
                 m_nPushFailed = 0;
 
-                while ( v.nNo < nPushCount ) {
-                    if ( m_Queue.push( v, m_nWriterId ))
+                while ( v.nNo < m_nPreStoreSize) {
+                    if ( m_Queue.push( v, m_nWriterId )) {
                         ++v.nNo;
-                    else
+                    } else {
                         ++m_nPushFailed;
+                    }
+                }
+                s_nPreStoreDone.fetch_add(1);
+                while ( v.nNo < nPushCount - m_nPreStoreSize) {
+                    if ( m_Queue.push( v, m_nWriterId )) {
+                        ++v.nNo;
+                    } else {
+                        ++m_nPushFailed;
+                    }
                 }
 
                 s_nProducerDone.fetch_add( 1 );
@@ -122,6 +135,7 @@ namespace {
             Queue&              m_Queue;
             size_t              m_nPushFailed;
             size_t const        m_nPushCount;
+            size_t const        m_nPreStoreSize;
             size_t              m_nWriterId;
         };
 
@@ -189,6 +203,8 @@ namespace {
                 const size_t nTotalWriters = s_nProducerThreadCount;
                 value_type v;
                 bool writers_done = false;
+                while(s_nPreStoreDone.load(std::memory_order_acquire) < nTotalWriters) {
+                }
                 while ( true ) {
                     if ( m_Queue.pop( v, m_nReaderId )) {
                         ++m_nPopped;
@@ -211,6 +227,7 @@ namespace {
 
     protected:
         size_t m_nThreadPushCount;
+        size_t m_nThreadPreStoreSize;
 
     protected:
         template <class Queue>
@@ -302,8 +319,12 @@ namespace {
             m_nThreadPushCount = s_nQueueSize / s_nProducerThreadCount;
             s_nQueueSize = m_nThreadPushCount * s_nProducerThreadCount;
 
+            s_nPreStoreSize = 0;
+            m_nThreadPreStoreSize = s_nPreStoreSize / s_nProducerThreadCount;
+            s_nPreStoreSize = m_nThreadPreStoreSize * s_nProducerThreadCount;
+
             cds_test::thread_pool& pool = get_pool();
-            pool.add( new producer_type( pool, q, m_nThreadPushCount ), s_nProducerThreadCount );
+            pool.add( new producer_type( pool, q, m_nThreadPushCount , m_nThreadPreStoreSize), s_nProducerThreadCount );
             pool.add( new consumer_type( pool, q, m_nThreadPushCount ), s_nConsumerThreadCount );
             size_t writer_id = 0;
             size_t reader_id = 0;
@@ -325,10 +346,16 @@ namespace {
             }
 
             s_nProducerDone.store( 0 );
+            if(s_nPreStoreSize == 0) {
+              s_nPreStoreDone.store( s_nProducerThreadCount );
+            } else {
+              s_nPreStoreDone.store( 0 );
+            }
 
             propout() << std::make_pair( "producer_count", s_nProducerThreadCount )
                 << std::make_pair( "consumer_count", s_nConsumerThreadCount )
-                << std::make_pair( "push_count", s_nQueueSize );
+                << std::make_pair( "push_count", s_nQueueSize )
+                << std::make_pair( "pre_store_count", s_nPreStoreSize );
 
             std::chrono::milliseconds duration = pool.run();
 
@@ -366,6 +393,7 @@ namespace {
             s_nConsumerThreadCount = cfg.get_size_t( "ConsumerCount", s_nConsumerThreadCount );
             s_nProducerThreadCount = cfg.get_size_t( "ProducerCount", s_nProducerThreadCount );
             s_nQueueSize = cfg.get_size_t( "QueueSize", s_nQueueSize );
+            s_nPreStoreSize = cfg.get_size_t( "PreStore", s_nPreStoreSize );
             s_nHeavyValueSize = cfg.get_size_t( "HeavyValueSize", s_nHeavyValueSize );
 
             if ( s_nConsumerThreadCount == 0u )
@@ -380,6 +408,7 @@ namespace {
             std::cout << "[ STAT     ] Producer = " << s_nProducerThreadCount << std::endl;
             std::cout << "[ STAT     ] Consumer = " << s_nConsumerThreadCount << std::endl;
             std::cout << "[ STAT     ] QueueSize = " << s_nQueueSize << std::endl;
+            std::cout << "[ STAT     ] PreStoreSize = " << s_nPreStoreSize << std::endl;
 
             set_array_size( s_nHeavyValueSize );
 
