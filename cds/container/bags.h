@@ -160,8 +160,9 @@ namespace cds { namespace container {
                 assert(id < m_size);
                 auto &v = m_bag[id].value;
                 std::swap(t, v.value);
-                int old_flag = INSERT;
-                if(!v.flag.compare_exchange_strong(old_flag, EXTRACT, std::memory_order_release,
+                int old_flag = v.flag.load(std::memory_order_relaxed);
+                if(old_flag != INSERT ||
+                   !v.flag.compare_exchange_strong(old_flag, EXTRACT, std::memory_order_release,
                       std::memory_order_relaxed)) {
                   // This scenario is neglegible
                   std::swap(t, v.value);
