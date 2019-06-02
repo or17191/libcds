@@ -32,18 +32,15 @@ namespace cds { namespace intrusive {
           MarkedPtr pNext;
           while(true) {
             if ((ret = _xbegin()) == _XBEGIN_STARTED) {
+              pNext = old.load(std::memory_order_relaxed);
+              if (pNext.ptr() != nullptr) {
+                _xabort(0x01);
+              }
               if(_xbegin() == _XBEGIN_STARTED) {
-                pNext = old.load(std::memory_order_relaxed);
-                if (pNext.ptr() != nullptr) {
-                  _xabort(0x01);
-                }
+                delay(latency);
                 _xend();
               }
-              delay(latency);
-              if(_xbegin() == _XBEGIN_STARTED) {
-                old.store(new_node, std::memory_order_relaxed);
-                _xend();
-              }
+              old.store(new_node, std::memory_order_relaxed);
               _xend();
             }
             if (ret == 0) {
@@ -63,7 +60,7 @@ namespace cds { namespace intrusive {
             }
             const bool is_conflict = (ret & _XABORT_CONFLICT) != 0;
             const bool is_nested = (ret & _XABORT_NESTED) != 0;
-            if (is_conflict && !is_nested) {
+            if (is_conflict && is_nested) {
               if (!CheckNext::value) {
                 new_value = nullptr;
                 return InsertResult::FAILED_INSERT;
