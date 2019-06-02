@@ -264,7 +264,7 @@ namespace {
     };
 
     struct htm_id_traits : cds::container::sb_basket_queue::traits {
-      typedef cds::intrusive::htm_basket_queue::htm_insert<25, 30, 5> insert_policy;
+      typedef cds::intrusive::htm_basket_queue::htm_insert<10, 20, 5> insert_policy;
     };
 
     using HTMSBSimpleBasketQueue_HP = cds::container::SBBasketQueue<gc_type, value_type, SimpleBag, htm_traits>;
