@@ -315,8 +315,7 @@ namespace cds { namespace container {
                 if(!node_ptr) {
                   node_ptr.reset(alloc_node());
                   assert(node_ptr.get() != nullptr);
-                  constexpr cds::uuid_type MASK = ~cds::uuid_type{} << CHAR_BIT;
-                  node_ptr->m_basket_id = (uuid() & MASK) + id;
+                  node_ptr->m_basket_id = uuid();
                 }
                 if(!pNew) {
                   pNew = node_traits::to_node_ptr(node_ptr.get());
