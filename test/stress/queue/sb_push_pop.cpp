@@ -119,7 +119,7 @@ namespace {
                     }
                 }
                 s_nPreStoreDone.fetch_add(1);
-                while ( v.nNo < nPushCount - m_nPreStoreSize) {
+                while ( v.nNo < nPushCount ) {
                     if ( m_Queue.push( v, m_nWriterId )) {
                         ++v.nNo;
                     } else {
@@ -319,7 +319,6 @@ namespace {
             m_nThreadPushCount = s_nQueueSize / s_nProducerThreadCount;
             s_nQueueSize = m_nThreadPushCount * s_nProducerThreadCount;
 
-            s_nPreStoreSize = 0;
             m_nThreadPreStoreSize = s_nPreStoreSize / s_nProducerThreadCount;
             s_nPreStoreSize = m_nThreadPreStoreSize * s_nProducerThreadCount;
 
