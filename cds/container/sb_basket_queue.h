@@ -462,7 +462,6 @@ namespace cds { namespace container {
                     if (cds_unlikely(h.ptr() == t.ptr())) {
                         if (!pNext.ptr()) {
                             m_Stat.onEmptyDequeue();
-                            insert_policy::delay(10 * m_ids);
                             return false;
                         }
 
@@ -495,7 +494,6 @@ namespace cds { namespace container {
                             free_chain(h, iter);
                         } else if (pNext.ptr() == nullptr) {
                             m_Stat.onEmptyDequeue();
-                            insert_policy::delay(10 * m_ids);
                             return false;
                         } else {
                             auto value_node = node_traits::to_value_ptr(*iter.ptr());
