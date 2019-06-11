@@ -455,6 +455,9 @@ namespace {
     struct htm_id_traits : cds::container::sb_basket_queue::traits {
       typedef cds::intrusive::htm_basket_queue::htm_insert<50, 50, 5> insert_policy;
     };
+    struct htm_mod_id_traits : cds::container::sb_basket_queue::traits {
+      typedef cds::intrusive::htm_basket_queue::htm_insert<20, 20, 5> insert_policy;
+    };
 
     template <class Fixture>
     using SBSimpleBasketQueue_HP = cds::container::SBBasketQueue<typename Fixture::gc_type, typename Fixture::value_type, SimpleBag>;
@@ -471,8 +474,12 @@ namespace {
     template <class Fixture>
     using HTMSBIdBasketQueue_HP = cds::container::SBBasketQueue<typename Fixture::gc_type, typename Fixture::value_type, IdBag, htm_id_traits>;
 
+    template <class Fixture>
+    using HTMSBModIdBasketQueue_HP = cds::container::SBBasketQueue<typename Fixture::gc_type, typename Fixture::value_type, ModIdBag, htm_mod_id_traits>;
+
     CDSSTRESS_Queue_F( simple_sb_queue_push_pop, HTMSBSimpleBasketQueue_HP )
     CDSSTRESS_Queue_F( simple_sb_queue_push_pop, HTMSBIdBasketQueue_HP)
+    CDSSTRESS_Queue_F( simple_sb_queue_push_pop, HTMSBModIdBasketQueue_HP)
 
     struct htm_id_stat_traits : public htm_id_traits
     {

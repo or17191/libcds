@@ -212,6 +212,97 @@ namespace cds { namespace container {
         };
 
         template <class T>
+        class ModIdBag
+        {
+        private:
+            static constexpr int INSERT = 0;
+            static constexpr int EXTRACT = 1;
+            static constexpr int EMPTY = 2;
+            static constexpr int INSERTING = 3;
+            struct value
+            {
+                T value{};
+                std::atomic<int> flag{INSERT};
+            };
+            using value_type = PaddedValue<value>;
+            static constexpr size_t MAX_THREADS=20;
+            std::array<value_type, MAX_THREADS> m_bag;
+            PaddedValue<std::atomic<int>> status;
+            size_t m_size;
+
+        public:
+            static constexpr const size_t c_nHazardPtrCount = 0; ///< Count of hazard pointer required for the algorithm
+            ModIdBag(size_t ids) : m_size((ids + 1) / 2)
+            {
+                assert(m_size <= MAX_THREADS);
+                status.value.store(INSERT, std::memory_order_relaxed);
+            }
+            bool insert(T &t, size_t id)
+            {
+                if (id >= m_size) id -= m_size;
+                assert(id < m_size);
+                auto &v = m_bag[id].value;
+                int old_flag = v.flag.load(std::memory_order_relaxed);
+                if(old_flag != INSERT ||
+                   !v.flag.compare_exchange_strong(old_flag, INSERTING, std::memory_order_release,
+                      std::memory_order_relaxed)) {
+                  // This scenario is neglegible
+                  return false;
+                }
+                std::swap(t, v.value);
+                old_flag = v.flag.load(std::memory_order_relaxed);
+                if(old_flag != INSERTING ||
+                   !v.flag.compare_exchange_strong(old_flag, EXTRACT, std::memory_order_release,
+                      std::memory_order_relaxed)) {
+                  // This scenario is neglegible
+                  std::swap(t, v.value);
+                  return false;
+                }
+                return true;
+            }
+            bool extract(T &t, size_t id)
+            {
+                if (id >= m_size) id -= m_size;
+                int current_status = status.value.load(std::memory_order_acquire);
+                if(current_status == EMPTY) {
+                  return false;
+                }
+                auto pos = std::next(m_bag.begin(), id);
+                auto last = std::next(m_bag.begin(), m_size);
+                for(size_t i = 0; i < m_size; ++i, ++pos) {
+                  if(pos == last) {
+                    pos = m_bag.begin();
+                  }
+                  if(i % (m_size / 2) == 0 ) {
+                    if (status.value.load(std::memory_order_acquire) == EMPTY) {
+                      return false;
+                    }
+                  }
+                  auto& value = pos->value;
+                  if(value.flag.load(std::memory_order_relaxed) == EMPTY) {
+                    // This is pretty significant
+                    continue;
+                  }
+                  auto flag = value.flag.exchange(EMPTY, std::memory_order_acquire);
+                  // We still get a lot of EMPTYs here
+                  if(flag == EXTRACT) {
+                    std::swap(t, value.value);
+                    return true;
+                  }
+                }
+                current_status = status.value.load(std::memory_order_relaxed);
+                if(current_status == EMPTY) {
+                  return false;
+                }
+                status.value.store(EMPTY, std::memory_order_release);
+                return false;
+            }
+            bool empty() const {
+              return status.value.load(std::memory_order_acquire) == EMPTY;
+            }
+        };
+
+        template <class T>
         class StackBag
         {
         private:
