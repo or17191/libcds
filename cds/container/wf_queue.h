@@ -951,7 +951,8 @@ namespace cds { namespace container {
       };
 
       struct basket_traits : traits {
-        typedef basket_cell_getter<10> cell_getter;
+        enum { max_patience = 100} ;
+        typedef basket_cell_getter<20> cell_getter;
       };
       struct hash_basket_traits : traits {
         enum { max_patience = 40} ;
@@ -979,6 +980,8 @@ namespace cds { namespace container {
         using base_type::base_type;
         /// Synonym for \p dequeue() function
        bool dequeue(typename base_type::value_type& dest, size_t tid, cds::uuid_type* basket = nullptr ) {
+         return base_type::dequeue(dest, tid);
+       /*
           auto& handle = base_type::m_handle[tid];
           handle.hzd_node_id.store(handle.deq_node_id, memory_model::memory_order_acquire);
 
@@ -1012,6 +1015,7 @@ namespace cds { namespace container {
             return true;
           }
           
+        */
         }
         template <class... Args>
         bool pop(Args &&... args)

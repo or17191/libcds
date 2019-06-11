@@ -24,16 +24,11 @@ namespace cds_test {
     static inline property_stream& operator <<( property_stream& o, cds::container::wf_queue::stat<Counter> const& s )
     {
         return o
-            << CDSSTRESS_STAT_OUT( s, m_EnqueueCount )
-            << CDSSTRESS_STAT_OUT( s, m_EnqueueRace )
-            << CDSSTRESS_STAT_OUT( s, m_DequeueCount )
-            << CDSSTRESS_STAT_OUT( s, m_EmptyDequeue )
-            << CDSSTRESS_STAT_OUT( s, m_DequeueRace )
-            << CDSSTRESS_STAT_OUT( s, m_AdvanceTailError )
-            << CDSSTRESS_STAT_OUT( s, m_BadTail )
-            << CDSSTRESS_STAT_OUT( s, m_TryAddBasket )
-            << CDSSTRESS_STAT_OUT( s, m_AddBasketCount )
-            << CDSSTRESS_STAT_OUT( s, m_NullBasket );
+            << CDSSTRESS_STAT_OUT( s, m_FastEnqueue )
+            << CDSSTRESS_STAT_OUT( s, m_FastDequeue )
+            << CDSSTRESS_STAT_OUT( s, m_SlowEnqueue )
+            << CDSSTRESS_STAT_OUT( s, m_SlowDequeue )
+            << CDSSTRESS_STAT_OUT( s, m_Empty );
     }
 
     static inline property_stream& operator <<( property_stream& o, cds::container::wf_queue::empty_stat const& /*s*/ )
@@ -437,6 +432,31 @@ namespace {
     TEST_F( simple_sb_queue_push_pop, WFQueue )
     {
         typedef WFQueue<simple_sb_queue_push_pop> queue_type;
+        ASSERT_EQ(s_nConsumerThreadCount, s_nProducerThreadCount);
+        queue_type queue( s_nConsumerThreadCount + s_nProducerThreadCount);
+        test( queue, false );
+    }
+
+    // template <class Fixture>
+    // using BasketWFQueue = cds::container::BasketWFQueue<typename Fixture::gc_type, typename Fixture::value_type>;
+
+    // TEST_F( simple_sb_queue_push_pop, BasketWFQueue )
+    // {
+    //     typedef BasketWFQueue<simple_sb_queue_push_pop> queue_type;
+    //     ASSERT_EQ(s_nConsumerThreadCount, s_nProducerThreadCount);
+    //     queue_type queue( s_nConsumerThreadCount + s_nProducerThreadCount);
+    //     test( queue, false );
+    // }
+
+    struct stat_wf_queue : public cds::container::wf_queue::traits {
+      typedef cds::container::wf_queue::stat<> stat;
+    };
+
+    template <class Fixture>
+    using WFQueue_Stat = cds::container::WFQueue<typename Fixture::gc_type, typename Fixture::value_type, stat_wf_queue>;
+    TEST_F( simple_sb_queue_push_pop, WFQueue_Stat )
+    {
+        typedef WFQueue_Stat<simple_sb_queue_push_pop> queue_type;
         ASSERT_EQ(s_nConsumerThreadCount, s_nProducerThreadCount);
         queue_type queue( s_nConsumerThreadCount + s_nProducerThreadCount);
         test( queue, false );
