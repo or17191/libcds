@@ -49,7 +49,7 @@ namespace {
     static size_t s_nHeavyValueSize = 100;
 
     static std::atomic<size_t> s_nProducerDone( 0 );
-    static std::atomic<size_t> s_nPreStoreDone( 0 );
+    static bool s_nPreStoreDone( false );
 
     struct old_value
     {
@@ -103,26 +103,28 @@ namespace {
                 s_Topology->pin_thread(id());
                 value_type v;
                 v.nWriterNo = m_nWriterId;
-                v.nNo = 0;
-                m_nPushFailed = 0;
-
-                while ( v.nNo < m_nPreStoreSize) {
-                    if ( m_Queue.push( v, m_nWriterId )) {
-                        ++v.nNo;
-                    } else {
-                        ++m_nPushFailed;
-                    }
+                if(!s_nPreStoreDone) {
+                  v.nNo = 0;
+                  m_nPushFailed = 0;
+                  while ( v.nNo < m_nPreStoreSize) {
+                      if ( m_Queue.push( v, m_nWriterId )) {
+                          ++v.nNo;
+                      } else {
+                          ++m_nPushFailed;
+                      }
+                  }
+                } else {
+                  v.nNo = m_nPreStoreSize;
+                  while ( v.nNo < nPushCount ) {
+                      if ( m_Queue.push( v, m_nWriterId )) {
+                          ++v.nNo;
+                      } else {
+                          ++m_nPushFailed;
+                      }
+                  }
+                  s_nProducerDone.fetch_add( 1 );
                 }
-                s_nPreStoreDone.fetch_add(1);
-                while ( v.nNo < nPushCount ) {
-                    if ( m_Queue.push( v, m_nWriterId )) {
-                        ++v.nNo;
-                    } else {
-                        ++m_nPushFailed;
-                    }
-                }
 
-                s_nProducerDone.fetch_add( 1 );
                 s_Topology->verify_pin(id());
             }
 
@@ -192,29 +194,29 @@ namespace {
             virtual void test()
             {
                 s_Topology->pin_thread(id());
-                m_nPopEmpty = 0;
-                m_nPopped = 0;
-                m_nBadWriter = 0;
-                const size_t nTotalWriters = s_nProducerThreadCount;
-                value_type v;
-                bool writers_done = false;
-                while(s_nPreStoreDone.load(std::memory_order_acquire) < nTotalWriters) {
-                }
-                while ( true ) {
-                    if ( m_Queue.pop( v, m_nReaderId )) {
-                        ++m_nPopped;
-                        if ( v.nWriterNo < nTotalWriters )
-                            m_WriterData[ v.nWriterNo ].push_back( v.nNo );
-                        else
-                            ++m_nBadWriter;
-                    }
-                    else {
-                        ++m_nPopEmpty;
-                        if (writers_done) {
-                          break;
-                        }
-                        writers_done = s_nProducerDone.load() >= nTotalWriters;
-                    }
+                if(s_nPreStoreDone) {
+                  m_nPopEmpty = 0;
+                  m_nPopped = 0;
+                  m_nBadWriter = 0;
+                  const size_t nTotalWriters = s_nProducerThreadCount;
+                  value_type v;
+                  bool writers_done = false;
+                  while ( true ) {
+                      if ( m_Queue.pop( v, m_nReaderId )) {
+                          ++m_nPopped;
+                          if ( v.nWriterNo < nTotalWriters )
+                              m_WriterData[ v.nWriterNo ].push_back( v.nNo );
+                          else
+                              ++m_nBadWriter;
+                      }
+                      else {
+                          ++m_nPopEmpty;
+                          if (writers_done) {
+                            break;
+                          }
+                          writers_done = s_nProducerDone.load() >= nTotalWriters;
+                      }
+                  }
                 }
                 s_Topology->verify_pin(id());
             }
@@ -340,18 +342,16 @@ namespace {
             }
 
             s_nProducerDone.store( 0 );
-            if(s_nPreStoreSize == 0) {
-              s_nPreStoreDone.store( s_nProducerThreadCount );
-            } else {
-              s_nPreStoreDone.store( 0 );
-            }
+            s_nPreStoreDone = false;
+            pool.run();
+            s_nPreStoreDone = true;
+            std::chrono::milliseconds duration = pool.run();
 
             propout() << std::make_pair( "producer_count", s_nProducerThreadCount )
                 << std::make_pair( "consumer_count", s_nConsumerThreadCount )
                 << std::make_pair( "push_count", s_nQueueSize )
                 << std::make_pair( "pre_store_count", s_nPreStoreSize );
 
-            std::chrono::milliseconds duration = pool.run();
 
             propout() << std::make_pair( "duration", duration );
             std::cout << "[ STAT     ] Duration = " << duration.count() << "ms" << std::endl;
