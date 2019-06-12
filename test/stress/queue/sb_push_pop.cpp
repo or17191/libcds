@@ -57,6 +57,22 @@ namespace {
         size_t nWriterNo;
     };
 
+    template <class Queue>
+    size_t push_many(Queue& queue, const size_t first, const size_t last, const size_t producer) {
+      size_t failed = 0;
+      old_value v;
+      v.nNo = first;
+      v.nWriterNo = producer;
+      while(v.nNo < last) {
+        if ( queue.push( v, producer )) {
+            ++v.nNo;
+        } else {
+            ++failed;
+        }
+      }
+      return failed;
+    }
+
     template<class Value = old_value>
     class sb_queue_push_pop: public cds_test::stress_fixture
     {
@@ -101,27 +117,10 @@ namespace {
             {
                 size_t const nPushCount = m_nPushCount;
                 s_Topology->pin_thread(id());
-                value_type v;
-                v.nWriterNo = m_nWriterId;
                 if(!s_nPreStoreDone) {
-                  v.nNo = 0;
-                  m_nPushFailed = 0;
-                  while ( v.nNo < m_nPreStoreSize) {
-                      if ( m_Queue.push( v, m_nWriterId )) {
-                          ++v.nNo;
-                      } else {
-                          ++m_nPushFailed;
-                      }
-                  }
+                  m_nPushFailed += push_many(m_Queue, 0, m_nPreStoreSize, m_nWriterId);
                 } else {
-                  v.nNo = m_nPreStoreSize;
-                  while ( v.nNo < nPushCount ) {
-                      if ( m_Queue.push( v, m_nWriterId )) {
-                          ++v.nNo;
-                      } else {
-                          ++m_nPushFailed;
-                      }
-                  }
+                  m_nPushFailed += push_many(m_Queue, m_nPreStoreSize, m_nPushCount, m_nWriterId);
                   s_nProducerDone.fetch_add( 1 );
                 }
 
@@ -308,7 +307,7 @@ namespace {
         }
 
         template <class Queue>
-        void test_queue( Queue& q, bool independent_ids )
+        void test_queue( Queue& q, bool independent_ids, bool sequential_pre_store )
         {
             typedef Consumer<Queue> consumer_type;
             typedef Producer<Queue> producer_type;
@@ -341,10 +340,19 @@ namespace {
                 }
             }
 
-            s_nProducerDone.store( 0 );
             s_nPreStoreDone = false;
-            pool.run();
+            if (sequential_pre_store) {
+              std::cout << "[ STAT     ] Sequential pre store" << std::endl;
+              for(size_t i = 0; i < s_nProducerThreadCount; ++i) {
+                size_t failed = push_many(q, 0, m_nThreadPreStoreSize, i);
+                EXPECT_EQ(0, failed);
+              }
+            } else {
+              std::cout << "[ STAT     ] Parallel pre store" << std::endl;
+              pool.run();
+            }
             s_nPreStoreDone = true;
+            s_nProducerDone.store( 0 );
             std::chrono::milliseconds duration = pool.run();
 
             propout() << std::make_pair( "producer_count", s_nProducerThreadCount )
@@ -358,9 +366,9 @@ namespace {
         }
 
         template <class Queue>
-        void test( Queue& q, bool independent_ids)
+        void test( Queue& q, bool independent_ids, bool sequential_pre_store)
         {
-            test_queue( q , independent_ids);
+            test_queue( q , independent_ids, sequential_pre_store);
             analyze( q );
             propout() << q.statistics();
         }
@@ -423,19 +431,23 @@ namespace {
         typedef type_name<test_fixture> queue_type; \
         ASSERT_EQ(s_nConsumerThreadCount, s_nProducerThreadCount); \
         queue_type queue( s_nConsumerThreadCount); \
-        test( queue, true ); \
+        test( queue, true , false); \
+    }
+
+#define CDSSTRESS_WFQueue_F( test_fixture, type_name ) \
+    TEST_F( test_fixture, type_name ) \
+    { \
+        typedef type_name<test_fixture> queue_type; \
+        ASSERT_EQ(s_nConsumerThreadCount, s_nProducerThreadCount); \
+        queue_type queue( s_nConsumerThreadCount + s_nProducerThreadCount); \
+        test( queue, false , true); \
     }
 
     template <class Fixture>
     using WFQueue = cds::container::WFQueue<typename Fixture::gc_type, typename Fixture::value_type>;
 
-    TEST_F( simple_sb_queue_push_pop, WFQueue )
-    {
-        typedef WFQueue<simple_sb_queue_push_pop> queue_type;
-        ASSERT_EQ(s_nConsumerThreadCount, s_nProducerThreadCount);
-        queue_type queue( s_nConsumerThreadCount + s_nProducerThreadCount);
-        test( queue, false );
-    }
+    CDSSTRESS_WFQueue_F( simple_sb_queue_push_pop, WFQueue)
+
 
     // template <class Fixture>
     // using BasketWFQueue = cds::container::BasketWFQueue<typename Fixture::gc_type, typename Fixture::value_type>;
@@ -454,13 +466,7 @@ namespace {
 
     template <class Fixture>
     using WFQueue_Stat = cds::container::WFQueue<typename Fixture::gc_type, typename Fixture::value_type, stat_wf_queue>;
-    TEST_F( simple_sb_queue_push_pop, WFQueue_Stat )
-    {
-        typedef WFQueue_Stat<simple_sb_queue_push_pop> queue_type;
-        ASSERT_EQ(s_nConsumerThreadCount, s_nProducerThreadCount);
-        queue_type queue( s_nConsumerThreadCount + s_nProducerThreadCount);
-        test( queue, false );
-    }
+    CDSSTRESS_WFQueue_F( simple_sb_queue_push_pop, WFQueue_Stat)
 
     using namespace cds::container::bags;
 

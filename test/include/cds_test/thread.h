@@ -162,6 +162,7 @@ namespace cds_test {
 
         std::chrono::milliseconds run( std::chrono::seconds duration )
         {
+            m_startPoint.reset();
             m_startBarrier.reset( m_workers.size() + 1 );
             m_stopBarrier.reset( m_workers.size() + 1 );
 
