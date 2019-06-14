@@ -273,6 +273,8 @@ namespace {
             }
             EXPECT_EQ( nTotalPops, nPoppedItems );
 
+            propout() << std::make_pair("empty_pops", nPopFalse);
+
             EXPECT_EQ( nTotalPops + nPostTestPops, s_nQueueSize ) << "nTotalPops=" << nTotalPops << ", nPostTestPops=" << nPostTestPops;
             value_type v;
             EXPECT_FALSE( q.pop(v, 0));
