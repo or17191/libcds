@@ -26,37 +26,47 @@ namespace cds { namespace intrusive {
         static InsertResult _(MarkedPtr old_node, MarkedPtr new_node, MarkedPtr& new_value, size_t thread_count = 1, CheckNext = {}) {
           new_node->m_pNext.store(MarkedPtr{}, std::memory_order_relaxed);
           auto& old = old_node->m_pNext;
-          int ret, ret2;
-          bool might_be_not_null = true;
+          int ret;
           const size_t latency = thread_count * LATENCY;
-          MarkedPtr pNext;
+          auto check_value = [&old, &new_value] () {
+            for(size_t p = 0; p < PATIENCE; ++ p) {
+              auto value = old.load(std::memory_order_acquire);
+              if(value.ptr() != nullptr) {
+                new_value = value;
+                return true;
+              }
+              delay(FINAL_LATENCY);
+            }
+            return false;
+          };
+          MarkedPtr pNext = old.load(std::memory_order_acquire);
+          if(pNext.ptr() != nullptr) {
+            new_value = pNext;
+            return InsertResult::NOT_NULL;
+          }
           while(true) {
             if ((ret = _xbegin()) == _XBEGIN_STARTED) {
-              pNext = old.load(std::memory_order_relaxed);
-              if (pNext.ptr() != nullptr) {
-                _xabort(0x01);
-              }
               if(_xbegin() == _XBEGIN_STARTED) {
+                pNext = old.load(std::memory_order_relaxed);
+                if (pNext.ptr() != nullptr) {
+                  _xabort(0x01);
+                }
                 delay(latency);
                 _xend();
               }
               old.store(new_node, std::memory_order_relaxed);
               _xend();
             }
-            if (ret == 0) {
-              continue;
-            }
             if (ret == _XBEGIN_STARTED) {
               return InsertResult::SUCCESSFUL_INSERT;
             }
             if ((ret & _XABORT_EXPLICIT) != 0) {
               assert(_XABORT_CODE(ret) == 0x01);
-              new_value = old.load(std::memory_order_acquire);
-              if (might_be_not_null) {
-                return InsertResult::NOT_NULL;
-              } else {
-                return InsertResult::FAILED_INSERT;
-              }
+              return InsertResult::FAILED_INSERT;
+            }
+            if (ret == 0) {
+              // Relatively uncommon
+              continue;
             }
             const bool is_conflict = (ret & _XABORT_CONFLICT) != 0;
             const bool is_nested = (ret & _XABORT_NESTED) != 0;
@@ -65,15 +75,9 @@ namespace cds { namespace intrusive {
                 new_value = nullptr;
                 return InsertResult::FAILED_INSERT;
               }
-              might_be_not_null = false;
               delay(FINAL_LATENCY);
-              for(size_t p = 0; p < PATIENCE; ++ p) {
-                auto value = old.load(std::memory_order_acquire);
-                if(value.ptr() != nullptr) {
-                  new_value = value;
-                  return InsertResult::FAILED_INSERT;
-                }
-                delay(FINAL_LATENCY);
+              if(check_value()) {
+                return InsertResult::FAILED_INSERT;
               }
             }
           }
