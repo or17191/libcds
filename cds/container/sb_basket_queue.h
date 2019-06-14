@@ -339,7 +339,7 @@ namespace cds { namespace container {
                       throw std::logic_error(s.str());
                     };
                     pNew = nullptr; // Need to do this after we update node_ptr
-                    if (node->m_bag.insert(val, id)) {
+                    if (node->m_bag.insert(val, id, std::true_type{})) {
                         th.last_node = node->m_basket_id;
                         break;
                     } else {
@@ -361,7 +361,7 @@ namespace cds { namespace container {
                       s << "Other bag " << std::hex << th.last_node << ' ' << node->m_basket_id << ' ' << id;
                       throw std::logic_error(s.str());
                     };
-                    if (node->m_bag.insert(val, id)) {
+                    if (node->m_bag.insert(val, id, std::false_type{})) {
                         m_Stat.onAddBasket();
                         th.last_node = node->m_basket_id;
                         break;

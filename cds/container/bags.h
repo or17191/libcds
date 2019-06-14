@@ -64,7 +64,8 @@ namespace cds { namespace container {
               m_pushes.store(0, atomics::memory_order_relaxed);
             }
 
-            bool insert(T &t, size_t /*id*/)
+            template <class First>
+            bool insert(T &t, size_t /*id*/, First)
             {
                 auto idx = m_pushes.fetch_add(1, atomics::memory_order_acq_rel);
                 assert(idx < m_size);
@@ -155,7 +156,8 @@ namespace cds { namespace container {
                 assert(m_size <= MAX_THREADS);
                 status.value.store(INSERT, std::memory_order_relaxed);
             }
-            bool insert(T &t, size_t id)
+            template <class First>
+            bool insert(T &t, size_t id, First)
             {
                 assert(id < m_size);
                 auto &v = m_bag[id].value;
@@ -168,11 +170,31 @@ namespace cds { namespace container {
                   std::swap(t, v.value);
                   return false;
                 }
+                if(First::value) {
+                  status.value.store(EXTRACT, std::memory_order_release);
+                }
                 return true;
+            }
+            static bool attempt_pop(T& t, value& v) { 
+              auto old_flag = v.flag.load(std::memory_order_relaxed);
+              if(old_flag == EMPTY) {
+                // This is pretty significant
+                return false;
+              }
+              auto flag = v.flag.exchange(EMPTY, std::memory_order_acquire);
+              // We still get a lot of EMPTYs here
+              if(flag == EXTRACT) {
+                std::swap(t, v.value);
+                return true;
+              }
+              return false;
             }
             bool extract(T &t, size_t id)
             {
-                int current_status = status.value.load(std::memory_order_acquire);
+                int current_status = -1;
+                do {
+                  current_status = status.value.load(std::memory_order_acquire);
+                } while(current_status == INSERT);
                 if(current_status == EMPTY) {
                   return false;
                 }
@@ -187,15 +209,7 @@ namespace cds { namespace container {
                       return false;
                     }
                   }
-                  auto& value = pos->value;
-                  if(value.flag.load(std::memory_order_relaxed) == EMPTY) {
-                    // This is pretty significant
-                    continue;
-                  }
-                  auto flag = value.flag.exchange(EMPTY, std::memory_order_acquire);
-                  // We still get a lot of EMPTYs here
-                  if(flag == EXTRACT) {
-                    std::swap(t, value.value);
+                  if(attempt_pop(t, pos->value)) {
                     return true;
                   }
                 }
@@ -237,7 +251,8 @@ namespace cds { namespace container {
                 assert(m_size <= MAX_THREADS);
                 status.value.store(INSERT, std::memory_order_relaxed);
             }
-            bool insert(T &t, size_t id)
+            template <class First>
+            bool insert(T &t, size_t id, First)
             {
                 if (id >= m_size) id -= m_size;
                 assert(id < m_size);
@@ -317,7 +332,8 @@ namespace cds { namespace container {
             StackBag(size_t /*ids*/) {}
             static constexpr const size_t c_nHazardPtrCount = bag_type::c_nHazardPtrCount; ///< Count of hazard pointer required for the algorithm
 
-            bool insert(T &t, size_t /*id*/)
+            template <class First>
+            bool insert(T &t, size_t /*id*/, First)
             {
                 return m_bag.push(std::move(t));
             }
