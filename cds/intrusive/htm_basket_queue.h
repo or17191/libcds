@@ -28,17 +28,6 @@ namespace cds { namespace intrusive {
           auto& old = old_node->m_pNext;
           int ret;
           const size_t latency = thread_count * LATENCY;
-          auto check_value = [&old, &new_value] () {
-            for(size_t p = 0; p < PATIENCE; ++ p) {
-              auto value = old.load(std::memory_order_acquire);
-              if(value.ptr() != nullptr) {
-                new_value = value;
-                return true;
-              }
-              delay(FINAL_LATENCY);
-            }
-            return false;
-          };
           MarkedPtr pNext = old.load(std::memory_order_acquire);
           if(pNext.ptr() != nullptr) {
             new_value = pNext;
@@ -76,8 +65,13 @@ namespace cds { namespace intrusive {
                 return InsertResult::FAILED_INSERT;
               }
               delay(FINAL_LATENCY);
-              if(check_value()) {
-                return InsertResult::FAILED_INSERT;
+              for(size_t p = 0; p < PATIENCE; ++ p) {
+                auto value = old.load(std::memory_order_acquire);
+                if(value.ptr() != nullptr) {
+                  new_value = value;
+                  return InsertResult::FAILED_INSERT;
+                }
+                delay(FINAL_LATENCY);
               }
             }
           }

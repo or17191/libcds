@@ -350,6 +350,7 @@ namespace cds { namespace container {
                     m_Stat.onTryAddBasket();
 
                     if(is_deleted(t)) {
+                      // Doesn't happen for Id bag
                       continue;
                     }
 
