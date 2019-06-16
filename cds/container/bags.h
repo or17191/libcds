@@ -25,6 +25,9 @@ namespace cds { namespace container {
         {
             T value;
             char pad1_[cds::c_nCacheLineSize - sizeof(value)];
+
+            template <class... Args>
+            explicit PaddedValue(Args&&... args) : value(std::forward<Args>(args)...) {}
         };
 
         template <class T>
@@ -146,7 +149,7 @@ namespace cds { namespace container {
             using value_type = PaddedValue<value>;
             static constexpr size_t MAX_THREADS=40;
             std::array<value_type, MAX_THREADS> m_bag;
-            PaddedValue<std::atomic<int>> status;
+            PaddedValue<std::atomic<int>> status{INSERT};
             size_t m_size;
 
         public:
