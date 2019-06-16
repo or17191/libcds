@@ -79,6 +79,8 @@ namespace {
     public:
        using value_type = Value;
        using gc_type = cds::gc::HP;
+       using clock_type = std::chrono::steady_clock;
+       using duration_type = std::chrono::milliseconds;
     protected:
 
         enum {
@@ -120,7 +122,10 @@ namespace {
                 if(!s_nPreStoreDone) {
                   m_nPushFailed += push_many(m_Queue, 0, m_nPreStoreSize, m_nWriterId);
                 } else {
+                  auto start = clock_type::now();
                   m_nPushFailed += push_many(m_Queue, m_nPreStoreSize, m_nPushCount, m_nWriterId);
+                  auto end = clock_type::now();
+                  m_Duration = std::chrono::duration_cast<duration_type>(end - start);
                   s_nProducerDone.fetch_add( 1 );
                 }
 
@@ -133,6 +138,7 @@ namespace {
             size_t const        m_nPushCount;
             size_t const        m_nPreStoreSize;
             size_t              m_nWriterId;
+            duration_type       m_Duration;
         };
 
         template <class Queue, class HasBasket>
@@ -147,6 +153,7 @@ namespace {
             size_t              m_nPopped;
             size_t              m_nBadWriter;
             size_t              m_nReaderId;
+            duration_type       m_Duration;
 
             typedef std::vector<std::pair<size_t, size_t>> popped_data;
             typedef std::vector<size_t>::iterator       data_iterator;
@@ -210,6 +217,7 @@ namespace {
                   value_type v;
                   bool writers_done = false;
                   size_t basket;
+                  auto start = clock_type::now();
                   while ( true ) {
                       if (pop(v, m_nReaderId, basket, HasBasket{})) {
                           ++m_nPopped;
@@ -220,12 +228,14 @@ namespace {
                       }
                       else {
                           ++m_nPopEmpty;
+                          writers_done = s_nProducerDone.load() >= nTotalWriters;
                           if (writers_done) {
                             break;
                           }
-                          writers_done = s_nProducerDone.load() >= nTotalWriters;
                       }
                   }
+                  auto end = clock_type::now();
+                  m_Duration = std::chrono::duration_cast<duration_type>(end - start);
                 }
                 s_Topology->verify_pin(id());
             }
@@ -396,6 +406,30 @@ namespace {
 
             propout() << std::make_pair( "duration", duration );
             std::cout << "[ STAT     ] Duration = " << duration.count() << "ms" << std::endl;
+
+            duration_type reader_duration{0};
+            duration_type writer_duration{0};
+
+            for ( size_t i = 0; i < pool.size(); ++i ) {
+                cds_test::thread& thr = pool.get(i);
+                if ( thr.type() == consumer_thread ) {
+                    consumer_type& consumer = static_cast<consumer_type&>( thr );
+                    reader_duration += consumer.m_Duration;
+                }
+                else {
+                    assert( thr.type() == producer_thread );
+                    producer_type& producer = static_cast<producer_type&>( thr );
+                    writer_duration += producer.m_Duration;
+                }
+            }
+            double ns_reader_throughput = (reader_duration.count() * 1000.) / (s_nQueueSize);
+            double ns_writer_throughput = (writer_duration.count() * 1000.) / (s_nQueueSize - s_nPreStoreSize);
+
+            propout() << std::make_pair( "reader_throughput_nsop", ns_reader_throughput );
+            propout() << std::make_pair( "writer_throughput_nsop", ns_writer_throughput );
+            std::cout << "[ STAT     ] Reader Throughput = " << ns_reader_throughput << "ns/op" << std::endl;
+            std::cout << "[ STAT     ] Writer Throughput = " << ns_writer_throughput << "ns/op" << std::endl;
+
         }
 
         template <class Queue, class HasBaskets>
