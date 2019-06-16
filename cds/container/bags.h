@@ -184,7 +184,7 @@ namespace cds { namespace container {
                 // This is pretty significant
                 return false;
               }
-              auto flag = v.flag.exchange(EMPTY, std::memory_order_acquire);
+              auto flag = v.flag.exchange(EMPTY, std::memory_order_relaxed);
               // We still get a lot of EMPTYs here
               if(flag == EXTRACT) {
                 std::swap(t, v.value);
@@ -207,7 +207,7 @@ namespace cds { namespace container {
                   if(pos == last) {
                     pos = m_bag.begin();
                   }
-                  if(i % (m_size / 2) == 0 ) {
+                  if(i % (m_size >> 1) == 0) {
                     if (status.value.load(std::memory_order_acquire) == EMPTY) {
                       return false;
                     }
@@ -216,7 +216,7 @@ namespace cds { namespace container {
                     return true;
                   }
                 }
-                current_status = status.value.load(std::memory_order_relaxed);
+                current_status = status.value.load(std::memory_order_acquire);
                 if(current_status == EMPTY) {
                   return false;
                 }
