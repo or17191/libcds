@@ -150,7 +150,7 @@ namespace cds { namespace container {
             static constexpr size_t MAX_THREADS=40;
             std::array<value_type, MAX_THREADS> m_bag;
             PaddedValue<std::atomic<int>> status{INSERT};
-            size_t m_size;
+            const size_t m_size;
 
         public:
             static constexpr const size_t c_nHazardPtrCount = 0; ///< Count of hazard pointer required for the algorithm
@@ -204,10 +204,10 @@ namespace cds { namespace container {
                 auto pos = std::next(m_bag.begin(), id);
                 auto last = std::next(m_bag.begin(), m_size);
                 for(size_t i = 0; i < m_size; ++i, ++pos) {
-                  if(pos == last) {
+                  if(cds_unlikely(pos == last)) {
                     pos = m_bag.begin();
                   }
-                  if(i % (m_size >> 1) == 0) {
+                  if(cds_unlikely(i % (m_size >> 1) == 0)) {
                     if (status.value.load(std::memory_order_acquire) == EMPTY) {
                       return false;
                     }
@@ -217,10 +217,9 @@ namespace cds { namespace container {
                   }
                 }
                 current_status = status.value.load(std::memory_order_acquire);
-                if(current_status == EMPTY) {
-                  return false;
+                if(current_status != EMPTY) {
+                  status.value.store(EMPTY, std::memory_order_release);
                 }
-                status.value.store(EMPTY, std::memory_order_release);
                 return false;
             }
             bool empty() const {

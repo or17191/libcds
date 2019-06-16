@@ -333,13 +333,13 @@ namespace cds { namespace container {
                     auto copy_t = t;
                     if (!m_pTail.compare_exchange_strong(copy_t, marked_ptr(pNew), memory_model::memory_order_release, atomics::memory_order_relaxed))
                         m_Stat.onAdvanceTailFailed();
-                    if(th.last_node == node->m_basket_id) {
+                    if(cds_unlikely(th.last_node == node->m_basket_id)) {
                       std::stringstream s;
                       s << "My bag " << std::hex << th.last_node << ' ' << node->m_basket_id << ' ' << id;
                       throw std::logic_error(s.str());
                     };
                     pNew = nullptr; // Need to do this after we update node_ptr
-                    if (node->m_bag.insert(val, id, std::true_type{})) {
+                    if (cds_likely(node->m_bag.insert(val, id, std::true_type{}))) {
                         th.last_node = node->m_basket_id;
                         break;
                     } else {
@@ -357,12 +357,12 @@ namespace cds { namespace container {
                     // add to the basket
                     bkoff();
                     auto node = node_traits::to_value_ptr(t.ptr());
-                    if(th.last_node == node->m_basket_id) {
+                    if(cds_unlikely(th.last_node == node->m_basket_id)) {
                       std::stringstream s;
                       s << "Other bag " << std::hex << th.last_node << ' ' << node->m_basket_id << ' ' << id;
                       throw std::logic_error(s.str());
-                    };
-                    if (node->m_bag.insert(val, id, std::false_type{})) {
+                    }
+                    if (cds_likely(node->m_bag.insert(val, id, std::false_type{}))) {
                         m_Stat.onAddBasket();
                         th.last_node = node->m_basket_id;
                         break;
