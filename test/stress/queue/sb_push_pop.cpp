@@ -135,7 +135,7 @@ namespace {
             size_t              m_nWriterId;
         };
 
-        template <class Queue>
+        template <class Queue, class HasBasket>
         class Consumer: public cds_test::thread
         {
             typedef cds_test::thread base_class;
@@ -148,7 +148,7 @@ namespace {
             size_t              m_nBadWriter;
             size_t              m_nReaderId;
 
-            typedef std::vector<size_t> popped_data;
+            typedef std::vector<std::pair<size_t, size_t>> popped_data;
             typedef std::vector<size_t>::iterator       data_iterator;
             typedef std::vector<size_t>::const_iterator const_data_iterator;
 
@@ -190,6 +190,15 @@ namespace {
                 return new Consumer( *this );
             }
 
+            bool pop(value_type& value, size_t tid, cds::uuid_type& basket, std::true_type) {
+              return m_Queue.pop(value, tid, std::addressof(basket));
+            }
+
+            bool pop(value_type& value, size_t tid, cds::uuid_type& basket, std::false_type) {
+              basket = 0;
+              return m_Queue.pop(value, tid);
+            }
+
             virtual void test()
             {
                 s_Topology->pin_thread(id());
@@ -200,11 +209,12 @@ namespace {
                   const size_t nTotalWriters = s_nProducerThreadCount;
                   value_type v;
                   bool writers_done = false;
+                  size_t basket;
                   while ( true ) {
-                      if ( m_Queue.pop( v, m_nReaderId )) {
+                      if (pop(v, m_nReaderId, basket, HasBasket{})) {
                           ++m_nPopped;
                           if ( v.nWriterNo < nTotalWriters )
-                              m_WriterData[ v.nWriterNo ].push_back( v.nNo );
+                              m_WriterData[ v.nWriterNo ].emplace_back( v.nNo, basket );
                           else
                               ++m_nBadWriter;
                       }
@@ -226,12 +236,28 @@ namespace {
         size_t m_nThreadPreStoreSize;
 
     protected:
-        template <class Queue>
-        void analyze( Queue& q, size_t /*nLeftOffset*/ = 0, size_t nRightOffset = 0 )
+        template <class It>
+        void check_baskets(It first, It last, std::true_type) {
+          using value_type = decltype(*first);
+          auto checker = cds_test::BasketsChecker::make(first, last, [](const size_t& e) { return e; });
+          EXPECT_EQ(0, checker.null_basket_count);
+          EXPECT_GE(s_nProducerThreadCount, checker.distribution.rbegin()->first) << " allow at most one element per thread in each basket";
+          propout() << std::make_pair("basket_distribution", checker.distribution_str());
+          auto mean_std = checker.mean_std();
+          propout() << std::make_pair("basket_mean", mean_std.first);
+          propout() << std::make_pair("basket_std", mean_std.second);
+        }
+
+        template <class It>
+        void check_baskets(It first, It last, std::false_type) {
+        }
+
+        template <class Queue, class HasBaskets>
+        void analyze( Queue& q, HasBaskets, size_t /*nLeftOffset*/ = 0, size_t nRightOffset = 0 )
         {
             cds_test::thread_pool& pool = get_pool();
 
-            typedef Consumer<Queue> consumer_type;
+            typedef Consumer<Queue, HasBaskets> consumer_type;
             typedef Producer<Queue> producer_type;
 
             size_t nPostTestPops = 0;
@@ -247,6 +273,7 @@ namespace {
             size_t nPushFailed = 0;
 
             std::vector< consumer_type * > arrConsumer;
+            std::vector<size_t> baskets;
 
             for ( size_t i = 0; i < pool.size(); ++i ) {
                 cds_test::thread& thr = pool.get(i);
@@ -289,13 +316,15 @@ namespace {
                     if ( it != itEnd ) {
                         auto itPrev = it;
                         for ( ++it; it != itEnd; ++it ) {
-                            EXPECT_LT( *itPrev, *it + nRightOffset ) << "consumer=" << nReader << ", producer=" << nWriter;
+                            EXPECT_LT( itPrev->first, it->first + nRightOffset ) << "consumer=" << nReader << ", producer=" << nWriter;
                             itPrev = it;
                         }
                     }
 
-                    for ( it = arrConsumer[nReader]->m_WriterData[nWriter].begin(); it != itEnd; ++it )
-                        arrData.push_back( *it );
+                    for ( it = arrConsumer[nReader]->m_WriterData[nWriter].begin(); it != itEnd; ++it ) {
+                        arrData.push_back( it->first );
+                        baskets.push_back( it->second );
+                    }
                 }
 
                 std::sort( arrData.begin(), arrData.end());
@@ -306,12 +335,14 @@ namespace {
                 EXPECT_EQ( arrData[0], 0u ) << "producer=" << nWriter;
                 EXPECT_EQ( arrData[arrData.size() - 1], m_nThreadPushCount - 1 ) << "producer=" << nWriter;
             }
+
+            check_baskets(baskets.begin(), baskets.end(), HasBaskets{});
         }
 
-        template <class Queue>
-        void test_queue( Queue& q, bool independent_ids, bool sequential_pre_store )
+        template <class Queue, class HasBaskets>
+        void test_queue( Queue& q, bool independent_ids, bool sequential_pre_store, HasBaskets )
         {
-            typedef Consumer<Queue> consumer_type;
+            typedef Consumer<Queue, HasBaskets> consumer_type;
             typedef Producer<Queue> producer_type;
 
             m_nThreadPushCount = s_nQueueSize / s_nProducerThreadCount;
@@ -367,11 +398,11 @@ namespace {
             std::cout << "[ STAT     ] Duration = " << duration.count() << "ms" << std::endl;
         }
 
-        template <class Queue>
-        void test( Queue& q, bool independent_ids, bool sequential_pre_store)
+        template <class Queue, class HasBaskets>
+        void test( Queue& q, bool independent_ids, bool sequential_pre_store, HasBaskets hb)
         {
-            test_queue( q , independent_ids, sequential_pre_store);
-            analyze( q );
+            test_queue( q , independent_ids, sequential_pre_store, hb);
+            analyze( q , hb);
             propout() << q.statistics();
         }
 
@@ -433,7 +464,7 @@ namespace {
         typedef type_name<test_fixture> queue_type; \
         ASSERT_EQ(s_nConsumerThreadCount, s_nProducerThreadCount); \
         queue_type queue( s_nConsumerThreadCount); \
-        test( queue, true , false); \
+        test( queue, true , false, std::true_type{}); \
     }
 
 #define CDSSTRESS_WFQueue_F( test_fixture, type_name ) \
@@ -442,7 +473,7 @@ namespace {
         typedef type_name<test_fixture> queue_type; \
         ASSERT_EQ(s_nConsumerThreadCount, s_nProducerThreadCount); \
         queue_type queue( s_nConsumerThreadCount + s_nProducerThreadCount); \
-        test( queue, false , true); \
+        test( queue, false , true, std::false_type{}); \
     }
 
     template <class Fixture>
