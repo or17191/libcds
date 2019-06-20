@@ -173,9 +173,6 @@ namespace cds { namespace container {
                   std::swap(t, v.value);
                   return false;
                 }
-                if(First::value) {
-                  status.value.store(EXTRACT, std::memory_order_release);
-                }
                 return true;
             }
             static bool attempt_pop(T& t, value& v) { 
@@ -195,9 +192,7 @@ namespace cds { namespace container {
             bool extract(T &t, size_t id)
             {
                 int current_status = -1;
-                do {
-                  current_status = status.value.load(std::memory_order_acquire);
-                } while(current_status == INSERT);
+                current_status = status.value.load(std::memory_order_acquire);
                 if(current_status == EMPTY) {
                   return false;
                 }
