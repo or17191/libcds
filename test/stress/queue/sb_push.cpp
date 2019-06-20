@@ -54,6 +54,9 @@ namespace {
     class sb_queue_push : public cds_test::stress_fixture
     {
         typedef cds_test::stress_fixture base_class;
+    public:
+       using clock_type = std::chrono::steady_clock;
+       using duration_type = std::chrono::milliseconds;
 
     protected:
 
@@ -87,6 +90,7 @@ namespace {
                 size_t i = 1;
                 const auto id_ = id();
                 m_Topology.pin_thread(id_);
+                auto start = clock_type::now();
                 while ( i <= m_count ) {
                     if ( m_Queue.push(value_type{id_, i}, id_)) {
                         ++i;
@@ -94,6 +98,8 @@ namespace {
                     else
                         ++m_nPushFailed;
                 }
+                auto end = clock_type::now();
+                m_Duration = std::chrono::duration_cast<duration_type>(end - start);
                 s_nProducerCount.fetch_sub( 1, atomics::memory_order_release );
                 m_Topology.verify_pin(id_);
             }
@@ -102,6 +108,7 @@ namespace {
             Queue&              m_Queue;
             const Topology& m_Topology;
             size_t              m_nPushFailed = 0;
+            duration_type       m_Duration;
 
             size_t m_count;
         };
@@ -222,13 +229,20 @@ namespace {
 
             size_t nPushFailed = 0;
 
+            duration_type totalDuration{0};
+
             for ( size_t i = 0; i < pool.size(); ++i ) {
                 cds_test::thread& thr = pool.get( i );
                 Producer<Queue>& producer = static_cast<Producer<Queue>&>( thr );
                 nPushFailed += producer.m_nPushFailed;
+                totalDuration += producer.m_Duration;
                 EXPECT_EQ( producer.m_nPushFailed, 0u ) << "producer " << i;
             }
             propout() << std::make_pair( "failed_push", nPushFailed );
+
+            double ns_throughput = (totalDuration.count() * 1000.) / (s_nQueueSize);
+            propout() << std::make_pair( "throughput_nsop", ns_throughput );
+            std::cout << "[ STAT     ] Throughput = " << ns_throughput << "ns/op" << std::endl;
 
             std::vector<size_t> latest(s_nThreadCount, 0);
             for(auto it = pValStart; it != pValEnd; ++it) {
