@@ -157,7 +157,6 @@ namespace cds { namespace container {
             IdBag(size_t ids) : m_size(ids)
             {
                 assert(m_size <= MAX_THREADS);
-                status.value.store(INSERT, std::memory_order_relaxed);
             }
             template <class First>
             bool insert(T &t, size_t id, First)
