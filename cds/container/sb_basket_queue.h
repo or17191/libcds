@@ -451,70 +451,49 @@ namespace cds { namespace container {
             back_off bkoff;
 
             marked_ptr h;
-            marked_ptr t;
             marked_ptr pNext;
 
             while (true) {
                 h = res.guards.protect(0, m_pHead, [](marked_ptr p) -> node_type * { return node_traits::to_value_ptr(p.ptr()); });
-                t = res.guards.protect(1, m_pTail, [](marked_ptr p) -> node_type * { return node_traits::to_value_ptr(p.ptr()); });
                 pNext = res.guards.protect(2, h->m_pNext, [](marked_ptr p) -> node_type * { return node_traits::to_value_ptr(p.ptr()); });
 
-                if (h == m_pHead.load(memory_model::memory_order_acquire)) {
-                    if (cds_unlikely(h.ptr() == t.ptr())) {
-                        if (!pNext.ptr()) {
-                            m_Stat.onEmptyDequeue();
-                            return false;
-                        }
+                marked_ptr iter(h);
+                size_t hops = 0;
 
-                        {
-                            typename gc::Guard g;
-                            while (pNext->m_pNext.load(memory_model::memory_order_relaxed).ptr() && m_pTail.load(memory_model::memory_order_relaxed) == t) {
-                                // Very few iterations
-                                pNext = g.protect(pNext->m_pNext, [](marked_ptr p) -> node_type * { return node_traits::to_value_ptr(p.ptr()); });
-                                res.guards.copy(2, g);
+                typename gc::Guard g;
+
+                while (pNext.ptr() && is_deleted(iter)) {
+                    iter = pNext;
+                    g.assign(res.guards.template get<node_type>(2));
+                    pNext = res.guards.protect(2, pNext->m_pNext, [](marked_ptr p) -> node_type * { return node_traits::to_value_ptr(p.ptr()); });
+                    ++hops;
+                }
+
+                if (pNext.ptr() == nullptr) {
+                    if (hops >= m_nMaxHops) {
+                      free_chain(h, iter);
+                    }
+                    m_Stat.onEmptyDequeue();
+                    return false;
+                } else if (!is_deleted(iter)) {
+                    auto value_node = node_traits::to_value_ptr(*iter.ptr());
+                    if (bDeque) {
+                        if (value_node->m_bag.extract(res.value, id)) {
+                            if (hops >= m_nMaxHops) {
+                              free_chain(h, iter);
                             }
-                        }
-
-                        m_pTail.compare_exchange_weak(t, marked_ptr(pNext.ptr()), memory_model::memory_order_acquire, atomics::memory_order_relaxed);
-                    } else {
-                        marked_ptr iter(h);
-                        size_t hops = 0;
-
-                        typename gc::Guard g;
-
-                        while (pNext.ptr() && is_deleted(iter) && iter.ptr() != t.ptr() && m_pHead.load(memory_model::memory_order_relaxed) == h) {
-                            iter = pNext;
-                            g.assign(res.guards.template get<node_type>(2));
-                            pNext = res.guards.protect(2, pNext->m_pNext, [](marked_ptr p) -> node_type * { return node_traits::to_value_ptr(p.ptr()); });
-                            ++hops;
-                        }
-
-                        if (m_pHead.load(memory_model::memory_order_relaxed) != h)
-                            continue;
-
-                        if (iter.ptr() == t.ptr() && hops >= m_nMaxHops) {
-                            free_chain(h, iter);
-                        } else if (pNext.ptr() == nullptr) {
-                            m_Stat.onEmptyDequeue();
-                            return false;
+                            res.basket_id = value_node->m_basket_id;
+                            break;
                         } else {
-                            auto value_node = node_traits::to_value_ptr(*iter.ptr());
-                            if (bDeque) {
-                                if (value_node->m_bag.extract(res.value, id)) {
-                                    res.basket_id = value_node->m_basket_id;
-                                    break;
-                                } else {
-                                    // empty node, mark it as deleted.
-                                    if (make_deleted(iter)) {
-                                        free_chain(h, pNext);
-                                    }
-                                }
-                            } else {
-                                // Not sure how thread safe that is
-                                res.basket_id = pNext->m_basket_id;
-                                return !value_node->m_bag.empty();
+                            // empty node, mark it as deleted.
+                            if (make_deleted(iter)) {
+                                free_chain(h, pNext);
                             }
                         }
+                    } else {
+                        // Not sure how thread safe that is
+                        res.basket_id = pNext->m_basket_id;
+                        return !value_node->m_bag.empty();
                     }
                 }
 
