@@ -21,7 +21,7 @@
 namespace cds_test {
 
     template <typename Counter>
-    static inline property_stream& operator <<( property_stream& o, cds::container::wf_queue::stat<Counter> const& s )
+    static inline property_stream& operator <<( property_stream& o, cds::container::wf_queue::full_stat<Counter> const& s )
     {
         return o
             << CDSSTRESS_STAT_OUT( s, m_FastEnqueue )
@@ -511,7 +511,7 @@ namespace {
     }
 
     template <class Fixture>
-    using WFQueue = cds::container::WFQueue<typename Fixture::gc_type, typename Fixture::value_type>;
+    using WFQueue = cds::container::WFQueue<typename Fixture::value_type>;
 
     CDSSTRESS_WFQueue_F( simple_sb_queue_push_pop, WFQueue)
 
@@ -528,11 +528,11 @@ namespace {
     // }
 
     struct stat_wf_queue : public cds::container::wf_queue::traits {
-      typedef cds::container::wf_queue::stat<> stat;
+      typedef cds::container::wf_queue::full_stat<> stat_type;
     };
 
     template <class Fixture>
-    using WFQueue_Stat = cds::container::WFQueue<typename Fixture::gc_type, typename Fixture::value_type, stat_wf_queue>;
+    using WFQueue_Stat = cds::container::WFQueue<typename Fixture::value_type, stat_wf_queue>;
     CDSSTRESS_WFQueue_F( simple_sb_queue_push_pop, WFQueue_Stat)
 
     using namespace cds::container::bags;

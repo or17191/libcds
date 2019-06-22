@@ -10,9 +10,7 @@
 #include <memory>
 
 #include <cds/container/details/base.h>
-#include <cds/details/marked_ptr.h>
-#include <cds/details/memkind_allocator.h>
-#include <cds/algo/uuid.h>
+#include <cds/gc/nogc.h>
 
 #if defined(__GNUC__) && __GNUC__ >= 4 && __GNUC_MINOR__ > 7
 /**
@@ -751,6 +749,7 @@ namespace cds { namespace container {
         public:
           using value_type = T;
           using item_counter = typename Traits::item_counter;
+          using gc = cds::gc::nogc;
           WFQueue(size_t ids)
               : m_size(ids), m_handlers(ids) 
           {
