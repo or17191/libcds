@@ -132,9 +132,8 @@ namespace {
 
         void SetUp()
         {
-            typedef cc::WFQueue< gc_type, int> queue_type;
+            typedef cc::WFQueue<int> queue_type;
 
-            cds::gc::hp::GarbageCollector::Construct( queue_type::c_nHazardPtrCount, 1, 16 );
             cds::threading::Manager::attachThread();
         }
 
@@ -148,79 +147,16 @@ namespace {
 
     TEST_F( WFQueue_HP, defaulted )
     {
-        typedef cds::container::WFQueue< gc_type, int> test_queue;
+        typedef cds::container::WFQueue<int> test_queue;
 
         test_queue q(1);
         test(q);
     }
 
-    TEST_F( WFQueue_HP, item_counting )
-    {
-        typedef cds::container::WFQueue < gc_type, int,
-            typename cds::container::wf_queue::make_traits <
-                cds::opt::item_counter < cds::atomicity::item_counter >
-            > ::type
-        > test_queue;
-
-        test_queue q(1);
-        test( q );
-    }
-
-    TEST_F( WFQueue_HP, relaxed )
-    {
-        typedef cds::container::WFQueue < gc_type, int,
-            typename cds::container::wf_queue::make_traits <
-                cds::opt::item_counter< cds::atomicity::item_counter >
-                , cds::opt::memory_model < cds::opt::v::relaxed_ordering >
-            > ::type
-        > test_queue;
-
-        test_queue q(1);
-        test( q );
-    }
-
-    TEST_F( WFQueue_HP, aligned )
-    {
-        typedef cds::container::WFQueue < gc_type, int,
-            typename cds::container::wf_queue::make_traits <
-                cds::opt::memory_model< cds::opt::v::relaxed_ordering>
-                , cds::opt::padding < 32 >
-            >::type
-        > test_queue;
-
-        test_queue q(1);
-        test( q );
-    }
-
-    TEST_F( WFQueue_HP, seq_cst )
-    {
-        struct traits : public cc::wf_queue::traits
-        {
-            typedef cds::opt::v::sequential_consistent memory_model;
-            typedef cds::atomicity::item_counter item_counter;
-            enum { padding = 64 };
-        };
-        typedef cds::container::WFQueue < gc_type, int, traits > test_queue;
-
-        test_queue q(1);
-        test( q );
-    }
 
     TEST_F( WFQueue_HP, move )
     {
-        typedef cds::container::WFQueue< gc_type, std::string> test_queue;
-
-        test_queue q(1);
-        test_string( q );
-    }
-
-    TEST_F( WFQueue_HP, move_item_counting )
-    {
-        struct traits : public cc::wf_queue::traits
-        {
-            typedef cds::atomicity::item_counter item_counter;
-        };
-        typedef cds::container::WFQueue< gc_type, std::string, traits > test_queue;
+        typedef cds::container::WFQueue<std::string> test_queue;
 
         test_queue q(1);
         test_string( q );
