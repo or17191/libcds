@@ -469,6 +469,7 @@ namespace cds { namespace container {
                         {
                             typename gc::Guard g;
                             while (pNext->m_pNext.load(memory_model::memory_order_relaxed).ptr() && m_pTail.load(memory_model::memory_order_relaxed) == t) {
+                                // Very few iterations
                                 pNext = g.protect(pNext->m_pNext, [](marked_ptr p) -> node_type * { return node_traits::to_value_ptr(p.ptr()); });
                                 res.guards.copy(2, g);
                             }
