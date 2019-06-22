@@ -181,7 +181,7 @@ namespace cds { namespace container {
                 // This is pretty significant
                 return false;
               }
-              auto flag = v.flag.exchange(EMPTY, std::memory_order_relaxed);
+              auto flag = v.flag.exchange(EMPTY, std::memory_order_acq_rel);
               // We still get a lot of EMPTYs here
               if(flag == EXTRACT) {
                 std::swap(t, v.value);
