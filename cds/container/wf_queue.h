@@ -11,6 +11,7 @@
 
 #include <cds/container/details/base.h>
 #include <cds/gc/nogc.h>
+#include <memkind.h>
 
 #if defined(__GNUC__) && __GNUC__ >= 4 && __GNUC_MINOR__ > 7
 /**
@@ -364,7 +365,12 @@ namespace cds { namespace container {
           }
 
           static inline node_t *new_node() {
-              node_t *n = reinterpret_cast<node_t*>(align_malloc(PAGE_SIZE, sizeof(node_t)));
+              void* p = memkind_calloc(MEMKIND_HUGETLB, 1, sizeof(node_t));
+              if(!p) {
+                fprintf(stderr, strerror(errno));
+                abort();
+              }
+              node_t *n = reinterpret_cast<node_t*>(p);
               memset(n, 0, sizeof(node_t));
               return n;
           }
@@ -435,7 +441,7 @@ namespace cds { namespace container {
 
                   while (old != new_node) {
                       node_t *tmp = old->next;
-                      free(old);
+                      memkind_free(MEMKIND_HUGETLB, old);
                       old = tmp;
                   }
               }
@@ -771,10 +777,18 @@ namespace cds { namespace container {
               return m_internal_queue.stat;
           }
 
+          struct memkind_deleter {
+            void operator()(T* ptr) const {
+              ptr->~T();
+              memkind_free(MEMKIND_HUGETLB, ptr);
+            }
+          };
+
           template <class Arg>
           bool enqueue(Arg &&val, size_t id)
           {
-              std::unique_ptr<T> heap_value{new T(std::forward<Arg>(val))};
+              void* p = memkind_calloc(MEMKIND_HUGETLB, 1, sizeof(T));
+              std::unique_ptr<T, memkind_deleter> heap_value{new (p) T(std::forward<Arg>(val))};
               enqueue(&m_internal_queue, &m_handlers[id], heap_value.get());
               heap_value.release();
               return true;
@@ -782,7 +796,7 @@ namespace cds { namespace container {
 
           bool dequeue(T &dest, size_t tid)
           {
-              std::unique_ptr<T> ptr;
+              std::unique_ptr<T, memkind_deleter> ptr;
               ptr.reset(reinterpret_cast<T*>(dequeue(&m_internal_queue, &m_handlers[tid])));
               if(!ptr) {
                 return false;
