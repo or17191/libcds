@@ -743,16 +743,26 @@ namespace cds { namespace container {
               th->Dh = th->next;
           }
 
+          struct memkind_deleter {
+            void operator()(T* ptr) const {
+              ptr->~T();
+              memkind_free(MEMKIND_HUGETLB, ptr);
+            }
+          };
+
+          using memkind_uptr = std::unique_ptr<T, memkind_deleter>;
+
           queue_t m_internal_queue;
           size_t m_size;
           std::vector<handle_t> m_handlers;
+          std::vector<std::vector<memkind_uptr>> m_deffered_free;
           bool m_queue_done = false;
         public:
           using value_type = T;
           using item_counter = typename Traits::item_counter;
           using gc = cds::gc::nogc;
           WFQueue(size_t ids)
-              : m_size(ids), m_handlers(ids) 
+              : m_size(ids), m_handlers(ids), m_deffered_free(ids)
           {
             queue_init(&m_internal_queue, m_size);
             for(size_t i = 0; i < m_size; ++i) {
@@ -772,18 +782,11 @@ namespace cds { namespace container {
               return m_internal_queue.stat;
           }
 
-          struct memkind_deleter {
-            void operator()(T* ptr) const {
-              ptr->~T();
-              memkind_free(MEMKIND_HUGETLB, ptr);
-            }
-          };
-
           template <class Arg>
           bool enqueue(Arg &&val, size_t id)
           {
               void* p = memkind_calloc(MEMKIND_HUGETLB, 1, sizeof(T));
-              std::unique_ptr<T, memkind_deleter> heap_value{new (p) T(std::forward<Arg>(val))};
+              memkind_uptr heap_value{new (p) T(std::forward<Arg>(val))};
               enqueue(&m_internal_queue, &m_handlers[id], heap_value.get());
               heap_value.release();
               return true;
@@ -791,12 +794,13 @@ namespace cds { namespace container {
 
           bool dequeue(T &dest, size_t tid)
           {
-              std::unique_ptr<T, memkind_deleter> ptr;
+              memkind_uptr ptr;
               ptr.reset(reinterpret_cast<T*>(dequeue(&m_internal_queue, &m_handlers[tid])));
               if(!ptr) {
                 return false;
               }
               std::swap(*ptr, dest);
+              m_deffered_free[tid].emplace_back(std::move(ptr));
               return true;
           }
 
