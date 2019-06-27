@@ -355,7 +355,7 @@ namespace cds { namespace container {
           {
             void * ptr;
 
-            int ret = posix_memalign(&ptr, align, size);
+            int ret = memkind_posix_memalign(MEMKIND_HUGETLB, &ptr, align, size);
             if (ret != 0) {
               fprintf(stderr, strerror(ret));
               abort();
@@ -365,12 +365,7 @@ namespace cds { namespace container {
           }
 
           static inline node_t *new_node() {
-              void* p = memkind_calloc(MEMKIND_HUGETLB, 1, sizeof(node_t));
-              if(!p) {
-                fprintf(stderr, strerror(errno));
-                abort();
-              }
-              node_t *n = reinterpret_cast<node_t*>(p);
+              node_t *n = reinterpret_cast<node_t*>(align_malloc(PAGE_SIZE, sizeof(node_t)));
               memset(n, 0, sizeof(node_t));
               return n;
           }
