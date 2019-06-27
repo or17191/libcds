@@ -163,16 +163,27 @@ namespace cds { namespace container {
             {
                 assert(id < m_size);
                 auto &v = m_bag[id].value;
-                std::swap(t, v.value);
-                int old_flag = v.flag.load(std::memory_order_relaxed);
-                if(old_flag != INSERT ||
-                   !v.flag.compare_exchange_strong(old_flag, EXTRACT, std::memory_order_release,
-                      std::memory_order_relaxed)) {
-                  // This scenario is neglegible
-                  std::swap(t, v.value);
-                  return false;
+                int ret;
+                while(true) {
+                  if ((ret = _xbegin()) == _XBEGIN_STARTED) {
+                    auto flag = v.flag.load(std::memory_order_relaxed);
+                    if (flag != INSERT) {
+                      _xabort(0x1);
+                    }
+                    v.flag.store(EXTRACT, std::memory_order_relaxed);
+                    std::swap(t, v.value);
+                    _xend();
+                    return true;
+                  } else if (ret & _XABORT_EXPLICIT) {
+                    break;
+                  } else if (ret & _XABORT_CONFLICT) {
+                    auto flag = v.flag.load(std::memory_order_relaxed);
+                    if (flag != INSERT) {
+                      break;
+                    }
+                  }
                 }
-                return true;
+                return false;
             }
             static bool attempt_pop(T& t, value& v) { 
               auto old_flag = v.flag.load(std::memory_order_relaxed);
