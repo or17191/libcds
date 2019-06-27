@@ -179,7 +179,7 @@ namespace cds { namespace container {
             : m_Dummy(ids), m_ids(ids),
               m_nodes_cache(new thread_data[m_ids]())
         {
-          m_Dummy.m_basket_id = static_cast<cds::uuid_type>(-1);
+          // m_Dummy.m_basket_id = static_cast<cds::uuid_type>(-1);
         }
 
         /// Destructor clears the queue
@@ -315,7 +315,7 @@ namespace cds { namespace container {
                 if(!node_ptr) {
                   node_ptr.reset(alloc_node());
                   assert(node_ptr.get() != nullptr);
-                  node_ptr->m_basket_id = uuid();
+                  // node_ptr->m_basket_id = uuid();
                 }
                 if(!pNew) {
                   pNew = node_traits::to_node_ptr(node_ptr.get());
@@ -333,11 +333,11 @@ namespace cds { namespace container {
                     auto copy_t = t;
                     if (!m_pTail.compare_exchange_strong(copy_t, marked_ptr(pNew), memory_model::memory_order_release, atomics::memory_order_relaxed))
                         m_Stat.onAdvanceTailFailed();
-                    if(cds_unlikely(th.last_node == node->m_basket_id)) {
-                      std::stringstream s;
-                      s << "My bag " << std::hex << th.last_node << ' ' << node->m_basket_id << ' ' << id;
-                      throw std::logic_error(s.str());
-                    };
+                    // if(cds_unlikely(th.last_node == node->m_basket_id)) {
+                    //   std::stringstream s;
+                    //   s << "My bag " << std::hex << th.last_node << ' ' << node->m_basket_id << ' ' << id;
+                    //   throw std::logic_error(s.str());
+                    // };
                     pNew = nullptr; // Need to do this after we update node_ptr
                     if (cds_likely(node->m_bag.insert(val, id, std::true_type{}))) {
                         th.last_node = node->m_basket_id;
@@ -349,22 +349,17 @@ namespace cds { namespace container {
                     // Try adding to basket
                     m_Stat.onTryAddBasket();
 
-                    if(is_deleted(t)) {
-                      // Doesn't happen for Id bag
-                      continue;
-                    }
-
                     // add to the basket
                     bkoff();
                     auto node = node_traits::to_value_ptr(t.ptr());
-                    if(cds_unlikely(th.last_node == node->m_basket_id)) {
-                      std::stringstream s;
-                      s << "Other bag " << std::hex << th.last_node << ' ' << node->m_basket_id << ' ' << id;
-                      throw std::logic_error(s.str());
-                    }
+                    // if(cds_unlikely(th.last_node == node->m_basket_id)) {
+                    //   std::stringstream s;
+                    //   s << "Other bag " << std::hex << th.last_node << ' ' << node->m_basket_id << ' ' << id;
+                    //   throw std::logic_error(s.str());
+                    // }
                     if (cds_likely(node->m_bag.insert(val, id, std::false_type{}))) {
                         m_Stat.onAddBasket();
-                        th.last_node = node->m_basket_id;
+                        // th.last_node = node->m_basket_id;
                         break;
                     } else {
                         continue;
@@ -482,7 +477,7 @@ namespace cds { namespace container {
                             if (hops >= m_nMaxHops) {
                               free_chain(h, iter);
                             }
-                            res.basket_id = value_node->m_basket_id;
+                            //res.basket_id = value_node->m_basket_id;
                             break;
                         } else {
                             // empty node, mark it as deleted.
@@ -492,7 +487,7 @@ namespace cds { namespace container {
                         }
                     } else {
                         // Not sure how thread safe that is
-                        res.basket_id = pNext->m_basket_id;
+                        // res.basket_id = pNext->m_basket_id;
                         return !value_node->m_bag.empty();
                     }
                 }

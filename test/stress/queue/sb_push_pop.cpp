@@ -498,7 +498,7 @@ namespace {
         typedef type_name<test_fixture> queue_type; \
         ASSERT_EQ(s_nConsumerThreadCount, s_nProducerThreadCount); \
         queue_type queue( s_nConsumerThreadCount); \
-        test( queue, true , false, std::true_type{}); \
+        test( queue, true , false, std::false_type{}); \
     }
 
 #define CDSSTRESS_WFQueue_F( test_fixture, type_name ) \

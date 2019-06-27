@@ -261,7 +261,7 @@ namespace {
     TEST_F( sb_queue_push, QueueType ) \
     { \
         QueueType q(s_nThreadCount); \
-        test( q , std::true_type{}); \
+        test( q , std::false_type{}); \
         QueueType::gc::force_dispose(); \
     }
 
