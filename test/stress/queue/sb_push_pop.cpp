@@ -94,20 +94,20 @@ namespace {
             typedef cds_test::thread base_class;
 
         public:
-            Producer( cds_test::thread_pool& pool, Queue& queue, size_t nPushCount, size_t nPreStoreSize )
+            Producer( cds_test::thread_pool& pool, Queue& queue, size_t nStart, size_t nEnd )
                 : base_class( pool, producer_thread )
                 , m_Queue( queue )
                 , m_nPushFailed( 0 )
-                , m_nPushCount( nPushCount )
-                , m_nPreStoreSize( nPreStoreSize )
+                , m_nStart( nStart )
+                , m_nEnd( nEnd )
             {}
 
             Producer( Producer& src )
                 : base_class( src )
                 , m_Queue( src.m_Queue )
                 , m_nPushFailed( 0 )
-                , m_nPushCount( src.m_nPushCount )
-                , m_nPreStoreSize( src.m_nPreStoreSize )
+                , m_nStart( src.m_nStart )
+                , m_nEnd( src.m_nEnd )
             {}
 
             virtual thread * clone()
@@ -117,26 +117,20 @@ namespace {
 
             virtual void test()
             {
-                size_t const nPushCount = m_nPushCount;
                 s_Topology->pin_thread(id());
-                if(!s_nPreStoreDone) {
-                  m_nPushFailed += push_many(m_Queue, 0, m_nPreStoreSize, m_nWriterId);
-                } else {
-                  auto start = clock_type::now();
-                  m_nPushFailed += push_many(m_Queue, m_nPreStoreSize, m_nPushCount, m_nWriterId);
-                  auto end = clock_type::now();
-                  m_Duration = std::chrono::duration_cast<duration_type>(end - start);
-                  s_nProducerDone.fetch_add( 1 );
-                }
-
+                auto start = clock_type::now();
+                m_nPushFailed += push_many(m_Queue, m_nStart, m_nEnd, m_nWriterId);
+                auto end = clock_type::now();
+                m_Duration = std::chrono::duration_cast<duration_type>(end - start);
+                s_nProducerDone.fetch_add( 1 );
                 s_Topology->verify_pin(id());
             }
 
         public:
             Queue&              m_Queue;
             size_t              m_nPushFailed;
-            size_t const        m_nPushCount;
-            size_t const        m_nPreStoreSize;
+            size_t const        m_nStart;
+            size_t const        m_nEnd;
             size_t              m_nWriterId;
             duration_type       m_Duration;
         };
@@ -209,34 +203,32 @@ namespace {
             virtual void test()
             {
                 s_Topology->pin_thread(id());
-                if(s_nPreStoreDone) {
-                  m_nPopEmpty = 0;
-                  m_nPopped = 0;
-                  m_nBadWriter = 0;
-                  const size_t nTotalWriters = s_nProducerThreadCount;
-                  value_type v;
-                  bool writers_done = false;
-                  size_t basket;
-                  auto start = clock_type::now();
-                  while ( true ) {
-                      if (pop(v, m_nReaderId, basket, HasBasket{})) {
-                          ++m_nPopped;
-                          if ( v.nWriterNo < nTotalWriters )
-                              m_WriterData[ v.nWriterNo ].emplace_back( v.nNo, basket );
-                          else
-                              ++m_nBadWriter;
-                      }
-                      else {
-                          ++m_nPopEmpty;
-                          writers_done = s_nProducerDone.load() >= nTotalWriters;
-                          if (writers_done) {
-                            break;
-                          }
-                      }
-                  }
-                  auto end = clock_type::now();
-                  m_Duration = std::chrono::duration_cast<duration_type>(end - start);
+                m_nPopEmpty = 0;
+                m_nPopped = 0;
+                m_nBadWriter = 0;
+                const size_t nTotalWriters = s_nProducerThreadCount;
+                value_type v;
+                bool writers_done = false;
+                size_t basket;
+                auto start = clock_type::now();
+                while ( true ) {
+                    if (pop(v, m_nReaderId, basket, HasBasket{})) {
+                        ++m_nPopped;
+                        if ( v.nWriterNo < nTotalWriters )
+                            m_WriterData[ v.nWriterNo ].emplace_back( v.nNo, basket );
+                        else
+                            ++m_nBadWriter;
+                    }
+                    else {
+                        ++m_nPopEmpty;
+                        writers_done = s_nProducerDone.load() >= nTotalWriters;
+                        if (writers_done) {
+                          break;
+                        }
+                    }
                 }
+                auto end = clock_type::now();
+                m_Duration = std::chrono::duration_cast<duration_type>(end - start);
                 s_Topology->verify_pin(id());
             }
         };
@@ -349,6 +341,28 @@ namespace {
             check_baskets(baskets.begin(), baskets.end(), HasBaskets{});
         }
 
+        template<class Producer, class Consumer>
+        static void setup_pool_ids(cds_test::thread_pool& pool, bool independent_ids) {
+          size_t writer_id = 0;
+          size_t reader_id = 0;
+          for ( size_t i = 0; i < pool.size(); ++i ) {
+              cds_test::thread& thr = pool.get(i);
+              if ( thr.type() == consumer_thread ) {
+                  Consumer& consumer = static_cast<Consumer&>( thr );
+                  if(independent_ids) {
+                    consumer.m_nReaderId = reader_id++;
+                  } else {
+                    consumer.m_nReaderId = writer_id++;
+                  }
+              }
+              else {
+                  assert( thr.type() == producer_thread );
+                  Producer& producer = static_cast<Producer&>( thr );
+                  producer.m_nWriterId = writer_id++;
+              }
+          }
+        }
+
         template <class Queue, class HasBaskets>
         void test_queue( Queue& q, bool independent_ids, bool sequential_pre_store, HasBaskets )
         {
@@ -362,28 +376,7 @@ namespace {
             s_nPreStoreSize = m_nThreadPreStoreSize * s_nProducerThreadCount;
 
             cds_test::thread_pool& pool = get_pool();
-            pool.add( new producer_type( pool, q, m_nThreadPushCount , m_nThreadPreStoreSize), s_nProducerThreadCount );
-            pool.add( new consumer_type( pool, q, m_nThreadPushCount ), s_nConsumerThreadCount );
-            size_t writer_id = 0;
-            size_t reader_id = 0;
-            for ( size_t i = 0; i < pool.size(); ++i ) {
-                cds_test::thread& thr = pool.get(i);
-                if ( thr.type() == consumer_thread ) {
-                    consumer_type& consumer = static_cast<consumer_type&>( thr );
-                    if(independent_ids) {
-                      consumer.m_nReaderId = reader_id++;
-                    } else {
-                      consumer.m_nReaderId = writer_id++;
-                    }
-                }
-                else {
-                    assert( thr.type() == producer_thread );
-                    producer_type& producer = static_cast<producer_type&>( thr );
-                    producer.m_nWriterId = writer_id++;
-                }
-            }
 
-            s_nPreStoreDone = false;
             if (sequential_pre_store) {
               std::cout << "[ STAT     ] Sequential pre store" << std::endl;
               for(size_t i = 0; i < s_nProducerThreadCount; ++i) {
@@ -392,8 +385,14 @@ namespace {
               }
             } else {
               std::cout << "[ STAT     ] Parallel pre store" << std::endl;
+              pool.add( new producer_type( pool, q, 0 , m_nThreadPreStoreSize), s_nProducerThreadCount );
+              setup_pool_ids<producer_type, consumer_type>(pool, independent_ids);
               pool.run();
+              pool.reset();
             }
+            pool.add( new producer_type( pool, q, m_nThreadPreStoreSize, m_nThreadPushCount), s_nProducerThreadCount );
+            pool.add( new consumer_type( pool, q, m_nThreadPushCount ), s_nConsumerThreadCount );
+            setup_pool_ids<producer_type, consumer_type>(pool, independent_ids);
             s_nPreStoreDone = true;
             s_nProducerDone.store( 0 );
             std::chrono::milliseconds duration = pool.run();
