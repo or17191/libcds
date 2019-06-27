@@ -199,37 +199,36 @@ namespace cds { namespace container {
               }
               return false;
             }
-            bool extract(T &t, size_t id)
-            {
-                int current_status = status.value.load(std::memory_order_acquire);
-                if(current_status == EMPTY) {
-                  return false;
-                }
-                auto pos = std::next(m_bag.begin(), id);
-                const auto last = std::next(m_bag.begin(), m_size);
-                for(size_t i = 0; i < m_size; ++i, ++pos) {
-                  if(cds_unlikely(pos == last)) {
-                    pos = m_bag.begin();
-                  }
-                  // For some reason, using % and not == here makes things faster
-                  if(cds_unlikely(i % (m_size >> 1) == 0)) {
-                    if (status.value.load(std::memory_order_acquire) == EMPTY) {
-                      return false;
-                    }
-                  }
-                  if(attempt_pop(t, pos->value)) {
-                    return true;
-                  }
-                }
-                current_status = status.value.load(std::memory_order_acquire);
-                if(current_status != EMPTY) {
-                  status.value.store(EMPTY, std::memory_order_release);
-                }
+            bool extract(T &t, size_t id) {
+              int current_status = status.value.load(std::memory_order_acquire);
+              if(current_status == EMPTY) {
                 return false;
-            }
-            bool empty() const {
-              return status.value.load(std::memory_order_acquire) == EMPTY;
-            }
+              }
+              auto pos = std::next(m_bag.begin(), id);
+              const auto last = std::next(m_bag.begin(), m_size);
+              for(size_t i = 0; i < m_size; ++i, ++pos) {
+                if(cds_unlikely(pos == last)) {
+                  pos = m_bag.begin();
+                }
+                // For some reason, using % and not == here makes things faster
+                if(cds_unlikely(i % (m_size >> 1) == 0)) {
+                  if (status.value.load(std::memory_order_acquire) == EMPTY) {
+                    return false;
+                  }
+                }
+                if(attempt_pop(t, pos->value)) {
+                  return true;
+                }
+              }
+              current_status = status.value.load(std::memory_order_acquire);
+              if(current_status != EMPTY) {
+                status.value.store(EMPTY, std::memory_order_release);
+              }
+              return false;
+          }
+          bool empty() const {
+            return status.value.load(std::memory_order_acquire) == EMPTY;
+          }
         };
 
         template <class T>

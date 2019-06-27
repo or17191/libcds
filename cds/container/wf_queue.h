@@ -168,11 +168,11 @@ namespace cds { namespace container {
 
           full_stat& operator +=( full_stat const& s )
           {
-              m_SlowEnqueue += m_SlowEnqueue.get();    
-              m_SlowDequeue += m_SlowDequeue.get();    
-              m_FastEnqueue += m_FastEnqueue.get();     
-              m_FastDequeue += m_FastDequeue.get();     
-              m_Empty += m_Empty.get();
+              m_SlowEnqueue += s.m_SlowEnqueue.get();
+              m_SlowDequeue += s.m_SlowDequeue.get();
+              m_FastEnqueue += s.m_FastEnqueue.get();
+              m_FastDequeue += s.m_FastDequeue.get();
+              m_Empty += s.m_Empty.get();
               return *this;
           }
           //@endcond
