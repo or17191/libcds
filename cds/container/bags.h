@@ -171,7 +171,7 @@ namespace cds { namespace container {
                       _xabort(0x1);
                     }
                     v.flag.store(EXTRACT, std::memory_order_relaxed);
-                    std::swap(t, v.value);
+                    v.value = std::move(t);
                     _xend();
                     return true;
                   } else if (ret & _XABORT_EXPLICIT) {
@@ -191,10 +191,10 @@ namespace cds { namespace container {
                 // This is pretty significant
                 return false;
               }
-              auto flag = v.flag.exchange(EMPTY, std::memory_order_acq_rel);
+              auto flag = v.flag.exchange(EMPTY, std::memory_order_release);
               // We still get a lot of EMPTYs here
               if(flag == EXTRACT) {
-                std::swap(t, v.value);
+                t = std::move(v.value);
                 return true;
               }
               return false;
