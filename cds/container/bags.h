@@ -20,11 +20,11 @@ namespace cds { namespace container {
           }
         }
 
-        template <class T>
+        template <class T, size_t PADDING=1>
         struct PaddedValue
         {
             T value;
-            char pad1_[cds::c_nCacheLineSize - sizeof(value)];
+            char pad1_[PADDING * cds::c_nCacheLineSize - sizeof(value)];
 
             template <class... Args>
             explicit PaddedValue(Args&&... args) : value(std::forward<Args>(args)...) {}
@@ -204,19 +204,36 @@ namespace cds { namespace container {
               if(current_status == EMPTY) {
                 return false;
               }
-              auto pos = std::next(m_bag.begin(), id);
-              const auto last = std::next(m_bag.begin(), m_size);
-              for(size_t i = 0; i < m_size; ++i, ++pos) {
+              thread_local value_type* last_pos = nullptr;
+              thread_local size_t last_i;
+              const auto last = std::next(m_bag.data(), m_size);
+              const auto first = m_bag.data();
+              value_type* pos;
+              size_t i;
+              if(last_pos >= first && last_pos < last) {
+                pos = last_pos;
+                i = last_i;
+              } else {
+                pos = std::next(first, id);
+                i = 0;
+              }
+              const size_t checkpoint = m_size >> 1;
+              volatile size_t x;
+              for(size_t current_i = 0; i < m_size; ++current_i, ++i, ++pos) {
                 if(cds_unlikely(pos == last)) {
-                  pos = m_bag.begin();
+                  pos = first;
                 }
-                // For some reason, using % and not == here makes things faster
-                if(cds_unlikely(i % (m_size >> 1) == 0)) {
+                x %= m_size; // Adding improves timings...
+                if(cds_unlikely(current_i == checkpoint)) {
+                  current_i = 0;
                   if (status.value.load(std::memory_order_acquire) == EMPTY) {
+                    last_pos = nullptr;
                     return false;
                   }
                 }
                 if(attempt_pop(t, pos->value)) {
+                  last_pos = pos;
+                  last_i = i;
                   return true;
                 }
               }
@@ -224,6 +241,7 @@ namespace cds { namespace container {
               if(current_status != EMPTY) {
                 status.value.store(EMPTY, std::memory_order_release);
               }
+              last_pos = nullptr;
               return false;
           }
           bool empty() const {
