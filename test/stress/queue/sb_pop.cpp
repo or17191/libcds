@@ -340,13 +340,15 @@ namespace {
     public:
         static void SetUpTestCase()
         {
-            cds_test::config const& cfg = get_config( "queue_pop" );
+            cds_test::config const& cfg = get_config( "sb_queue_pop" );
 
             s_nThreadCount = cfg.get_size_t( "ThreadCount", s_nThreadCount );
             s_nQueueSize = cfg.get_size_t( "QueueSize", s_nQueueSize );
 
             if ( s_nThreadCount == 0u )
                 s_nThreadCount = 1;
+
+            s_nQueueSize *= s_nThreadCount;
 
             std::cout << "[ STAT     ] ThreadCount = " << s_nThreadCount << std::endl;
             std::cout << "[ STAT     ] QueueSize = " << s_nQueueSize << std::endl;

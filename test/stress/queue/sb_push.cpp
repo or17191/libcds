@@ -117,7 +117,7 @@ namespace {
 
         static void SetUpTestCase()
         {
-            cds_test::config const& cfg = get_config( "queue_push" );
+            cds_test::config const& cfg = get_config( "sb_queue_push" );
 
             s_nThreadCount = cfg.get_size_t( "ThreadCount", s_nThreadCount );
             s_nQueueSize = cfg.get_size_t( "QueueSize", s_nQueueSize );
@@ -128,6 +128,8 @@ namespace {
                 s_nQueueSize = 1000;
 
             s_Topology = Topology(s_nThreadCount);
+
+            s_nQueueSize *= s_nThreadCount;
 
             std::cout << "[ STAT     ] ThreadCount = " << s_nThreadCount << std::endl;
             std::cout << "[ STAT     ] QueueSize = " << s_nQueueSize << std::endl;

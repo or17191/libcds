@@ -456,13 +456,16 @@ namespace {
     public:
         static void SetUpTestCase()
         {
-            cds_test::config const& cfg = get_config( "queue_push_pop" );
+            cds_test::config const& cfg = get_config( "sb_queue_push_pop" );
 
             s_nConsumerThreadCount = cfg.get_size_t( "ConsumerCount", s_nConsumerThreadCount );
             s_nProducerThreadCount = cfg.get_size_t( "ProducerCount", s_nProducerThreadCount );
             s_nQueueSize = cfg.get_size_t( "QueueSize", s_nQueueSize );
             s_nPreStoreSize = cfg.get_size_t( "PreStore", s_nPreStoreSize );
             s_nHeavyValueSize = cfg.get_size_t( "HeavyValueSize", s_nHeavyValueSize );
+
+            s_nQueueSize *= s_nProducerThreadCount;
+            s_nPreStoreSize *= s_nProducerThreadCount;
 
             if ( s_nConsumerThreadCount == 0u )
                 s_nConsumerThreadCount = 1;
