@@ -28,15 +28,15 @@ namespace cds { namespace container {
 
             template <class... Args>
             explicit PaddedValue(Args&&... args) : value(std::forward<Args>(args)...) {}
-        };
+        } __attribute__((aligned (PADDING * cds::c_nCacheLineSize)));
 
         template <class T>
         class SimpleBag
         {
         private:
             struct flagged_value {
-              T value;
               atomics::atomic_bool flag{false};
+              T value;
             };
             using value_type = PaddedValue<flagged_value>;
             atomics::atomic_int m_pushes{0};
@@ -143,13 +143,13 @@ namespace cds { namespace container {
             static constexpr int EMPTY = 2;
             struct value
             {
-                T value{};
                 std::atomic<int> flag{INSERT};
+                T value{};
             };
             using value_type = PaddedValue<value>;
             static constexpr size_t MAX_THREADS=40;
             std::array<value_type, MAX_THREADS> m_bag;
-            PaddedValue<std::atomic<int>> status{INSERT};
+            PaddedValue<std::atomic<int>, 2> status{INSERT};
             const size_t m_size;
 
         public:
@@ -200,13 +200,14 @@ namespace cds { namespace container {
               return flag;
             }
             bool extract(T &t, size_t id) {
+              const size_t size = m_size;
               int current_status = status.value.load(std::memory_order_acquire);
               if(current_status == EMPTY) {
                 return false;
               }
               thread_local value_type* last_pos = nullptr;
               thread_local size_t last_i;
-              const auto last = std::next(m_bag.data(), m_size);
+              const auto last = std::next(m_bag.data(), size);
               const auto first = m_bag.data();
               value_type* pos;
               size_t i;
@@ -217,13 +218,13 @@ namespace cds { namespace container {
                 pos = std::next(first, id);
                 i = 0;
               }
-              const size_t checkpoint = m_size >> 1;
+              const size_t checkpoint = size >> 1;
               volatile size_t x;
-              for(size_t current_i = 0; i < m_size; ++current_i, ++i, ++pos) {
+              for(size_t current_i = 0; i < size; ++current_i, ++i, ++pos) {
                 if(cds_unlikely(pos == last)) {
                   pos = first;
                 }
-                x %= m_size; // Adding improves timings...
+                x %= size; // Adding improves timings...
                 if(cds_unlikely(current_i == checkpoint)) {
                   current_i = 0;
                   if (status.value.load(std::memory_order_acquire) == EMPTY) {
@@ -260,8 +261,8 @@ namespace cds { namespace container {
             static constexpr int INSERTING = 3;
             struct value
             {
-                T value{};
                 std::atomic<int> flag{INSERT};
+                T value{};
             };
             using value_type = PaddedValue<value>;
             static constexpr size_t MAX_THREADS=20;
