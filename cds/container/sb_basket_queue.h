@@ -449,18 +449,21 @@ namespace cds { namespace container {
             marked_ptr pNext;
 
             while (true) {
-                h = res.guards.protect(0, m_pHead, [](marked_ptr p) -> node_type * { return node_traits::to_value_ptr(p.ptr()); });
-                pNext = res.guards.protect(2, h->m_pNext, [](marked_ptr p) -> node_type * { return node_traits::to_value_ptr(p.ptr()); });
+                // h = res.guards.protect(0, m_pHead, [](marked_ptr p) -> node_type * { return node_traits::to_value_ptr(p.ptr()); });
+                // pNext = res.guards.protect(2, h->m_pNext, [](marked_ptr p) -> node_type * { return node_traits::to_value_ptr(p.ptr()); });
+                h = node_traits::to_value_ptr(m_pHead.load(std::memory_order_acquire).ptr());
+                pNext = node_traits::to_value_ptr(h->m_pNext.load(std::memory_order_acquire).ptr());
 
                 marked_ptr iter(h);
                 size_t hops = 0;
 
-                typename gc::Guard g;
+                // typename gc::Guard g;
 
                 while (pNext.ptr() && is_deleted(iter)) {
                     iter = pNext;
-                    g.assign(res.guards.template get<node_type>(2));
-                    pNext = res.guards.protect(2, pNext->m_pNext, [](marked_ptr p) -> node_type * { return node_traits::to_value_ptr(p.ptr()); });
+                    // g.assign(res.guards.template get<node_type>(2));
+                    // pNext = res.guards.protect(2, pNext->m_pNext, [](marked_ptr p) -> node_type * { return node_traits::to_value_ptr(p.ptr()); });
+                    pNext = pNext->m_pNext.load(std::memory_order_acquire);
                     ++hops;
                 }
 
