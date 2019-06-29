@@ -185,19 +185,19 @@ namespace cds { namespace container {
                 }
                 return false;
             }
-            static bool attempt_pop(T& t, value& v) { 
-              auto old_flag = v.flag.load(std::memory_order_relaxed);
-              if(old_flag == EMPTY) {
+            static int attempt_pop(T& t, value& v) {
+              int flag = v.flag.load(std::memory_order_relaxed);
+              if(flag == EMPTY) {
                 // This is pretty significant
-                return false;
+                return flag;
               }
-              auto flag = v.flag.exchange(EMPTY, std::memory_order_release);
+              flag = v.flag.exchange(EMPTY, std::memory_order_release);
               // We still get a lot of EMPTYs here
               if(flag == EXTRACT) {
                 t = std::move(v.value);
-                return true;
+                return flag;
               }
-              return false;
+              return flag;
             }
             bool extract(T &t, size_t id) {
               int current_status = status.value.load(std::memory_order_acquire);
@@ -231,7 +231,8 @@ namespace cds { namespace container {
                     return false;
                   }
                 }
-                if(attempt_pop(t, pos->value)) {
+                int result = attempt_pop(t, pos->value);
+                if(result == EXTRACT) {
                   last_pos = pos;
                   last_i = i;
                   return true;
