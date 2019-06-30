@@ -31,6 +31,17 @@ namespace cds { namespace container {
         } __attribute__((aligned (PADDING * cds::c_nCacheLineSize)));
 
         template <class T>
+        struct TwicePaddedValue
+        {
+            char pad1_[cds::c_nCacheLineSize];
+            T value;
+            char pad2_[cds::c_nCacheLineSize - sizeof(value)];
+
+            template <class... Args>
+            explicit TwicePaddedValue(Args&&... args) : value(std::forward<Args>(args)...) {}
+        } __attribute__((aligned (2 * cds::c_nCacheLineSize)));
+
+        template <class T>
         class SimpleBag
         {
         private:
@@ -149,7 +160,7 @@ namespace cds { namespace container {
             using value_type = PaddedValue<value>;
             static constexpr size_t MAX_THREADS=40;
             std::array<value_type, MAX_THREADS> m_bag;
-            PaddedValue<std::atomic<int>, 2> status{INSERT};
+            TwicePaddedValue<std::atomic<int>> status{INSERT};
             const size_t m_size;
 
         public:
