@@ -160,7 +160,7 @@ namespace cds { namespace container {
             using value_type = PaddedValue<value>;
             static constexpr size_t MAX_THREADS=40;
             std::array<value_type, MAX_THREADS> m_bag;
-            TwicePaddedValue<std::atomic<int>> status{INSERT};
+            TwicePaddedValue<std::atomic<int>> status{0};
             const size_t m_size;
 
         public:
@@ -282,7 +282,7 @@ namespace cds { namespace container {
             }
             */
             bool empty() const {
-              return status.value.load(std::memory_order_acquire) == EMPTY;
+              return status.value.load(std::memory_order_acquire) >= m_size;
             }
         };
 
