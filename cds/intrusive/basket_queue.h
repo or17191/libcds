@@ -39,8 +39,9 @@ namespace cds { namespace intrusive {
                 typedef node<GC2, Tag2>  other ;    ///< Rebinding result
             };
 
-            atomic_marked_ptr m_pNext ; ///< pointer to the next node in the container
+            atomic_marked_ptr m_pNext __attribute__((aligned(cds::c_nCacheLineSize))); ///< pointer to the next node in the container
             uuid_type m_basket_id;
+            char pad1[cds::c_nCacheLineSize - sizeof(m_pNext) - sizeof(m_basket_id)];
 
             node() : m_basket_id(0)
             {

@@ -45,8 +45,8 @@ namespace cds { namespace container {
 
             struct node_type : public intrusive::basket_queue::node<gc>
             {
-                bag_type m_bag;
-                std::atomic<bool> deleted{false};
+                std::atomic<bool> deleted __attribute__((aligned(cds::c_nCacheLineSize))){false};
+                bag_type m_bag __attribute__((aligned(cds::c_nCacheLineSize)));
 
                 node_type(size_t size)
                     : m_bag(size)
@@ -135,6 +135,8 @@ namespace cds { namespace container {
         typename opt::details::apply_padding<atomic_marked_ptr, traits::padding>::padding_type pad1_;
         atomic_marked_ptr m_pTail{&m_Dummy}; ///< Queue's tail pointer (aligned)
         typename opt::details::apply_padding<atomic_marked_ptr, traits::padding>::padding_type pad2_;
+        atomic_marked_ptr m_pCapacity{&m_Dummy}; ///< Queue's tail pointer (aligned)
+        typename opt::details::apply_padding<atomic_marked_ptr, traits::padding>::padding_type pad4_;
         node_type m_Dummy; ///< dummy node
         typename opt::details::apply_padding<node_type, traits::padding>::padding_type pad3_;
         item_counter m_ItemCounter; ///< Item counter
@@ -176,6 +178,10 @@ namespace cds { namespace container {
           stat value;
         } __attribute__((aligned (cds::c_nCacheLineSize)));
         std::vector<padded_stat> m_thread_stat;
+        struct hazard_node {
+          std::atomic<int> value{-1};
+        } __attribute__((aligned (cds::c_nCacheLineSize)));
+        std::vector<hazard_node> m_thread_hazard;
         bool stat_copied = false;
 
     public:
@@ -183,9 +189,11 @@ namespace cds { namespace container {
         SBBasketQueue(size_t ids)
             : m_Dummy(ids), m_ids(ids),
               m_nodes_cache(new thread_data[m_ids]()),
-              m_thread_stat(ids * 2)
+              m_thread_stat(ids * 2),
+              m_thread_hazard(ids * 2)
         {
           // m_Dummy.m_basket_id = static_cast<cds::uuid_type>(-1);
+          m_Dummy.m_basket_id = 1;
         }
 
         /// Destructor clears the queue
@@ -210,6 +218,7 @@ namespace cds { namespace container {
 
             m_pHead.store(marked_ptr(nullptr), memory_model::memory_order_relaxed);
             m_pTail.store(marked_ptr(nullptr), memory_model::memory_order_relaxed);
+            m_pCapacity.store(marked_ptr(nullptr), memory_model::memory_order_relaxed);
 
             dispose_node(pHead);
         }
@@ -312,6 +321,40 @@ namespace cds { namespace container {
           }
           return node_ptr->deleted.compare_exchange_strong(status, true, memory_model::memory_order_release, memory_model::memory_order_relaxed);
         }
+        
+        marked_ptr protect(atomic_marked_ptr& p, size_t id) {
+          auto& haz = m_thread_hazard[id].value;
+          marked_ptr p1, p2;
+          p1 = p.load(std::memory_order_acquire);
+          while(true) {
+            haz.store(p1->m_basket_id, std::memory_order_acquire);
+            p2 = p.load(std::memory_order_acquire);
+            if(p1 == p2) {
+              break;
+            }
+            p1 = p2;
+          }
+          return p1;
+        }
+
+        void release(size_t id) {
+          auto& haz = m_thread_hazard[id].value;
+          haz.store(-1, std::memory_order_release);
+        }
+
+        marked_ptr assign(marked_ptr p, size_t id) {
+          auto& haz = m_thread_hazard[id].value;
+          auto new_id = p->m_basket_id;
+          assert(haz.load(std::memory_order_relaxed) < new_id && haz.load(std::memory_order_relaxed) != -1);
+          haz.store(new_id, std::memory_order_acq_rel);
+          return p;
+        }
+
+        marked_ptr assign(atomic_marked_ptr& p, size_t id) {
+          auto v = p.load(std::memory_order_acquire);
+          return assign(v, id);
+        }
+
         template <class Arg>
         bool do_enqueue(thread_data &th, Arg &&tmp_val, size_t id)
         {
@@ -320,9 +363,9 @@ namespace cds { namespace container {
             value_type val(std::forward<Arg>(tmp_val));
             base_node_type* pNew{nullptr};
 
-            typename gc::Guard guard;
-            typename gc::Guard gNext;
             back_off bkoff;
+
+            protect(m_pTail, id);
 
             while (true) {
                 if(!node_ptr) {
@@ -335,9 +378,10 @@ namespace cds { namespace container {
                   link_checker::is_empty(pNew);
                 }
 
-                const marked_ptr t = guard.protect(m_pTail, [](marked_ptr p) -> node_type * { return node_traits::to_value_ptr(p.ptr()); });
+                const marked_ptr t = assign(m_pTail, id);
 
                 marked_ptr pNext{};
+                pNew->m_basket_id = t->m_basket_id + 1;
                 const auto res = insert_policy::template _<memory_model>(t, marked_ptr(pNew), pNext, m_ids);
 
                 if ( res == insert_policy::InsertResult::SUCCESSFUL_INSERT) {
@@ -379,8 +423,6 @@ namespace cds { namespace container {
                     }
                 } else {
                     // Tail is misplaced, advance it
-                    typename gc::template GuardArray<2> g;
-                    g.assign(0, node_traits::to_value_ptr(t.ptr()));
                     if (m_pTail.load(memory_model::memory_order_acquire) != t) {
                         tstat.onEnqueueRace();
                         bkoff();
@@ -395,11 +437,9 @@ namespace cds { namespace container {
                         if (!bTailOk)
                             break;
 
-                        g.assign(1, node_traits::to_value_ptr(p.ptr()));
                         if (pNext->m_pNext.load(memory_model::memory_order_relaxed) != p)
                             continue;
                         pNext = p;
-                        g.assign(0, g.template get<node_type>(1));
                     }
                     auto copy_t = t;
                     if (!bTailOk || !m_pTail.compare_exchange_weak(copy_t, marked_ptr(pNext.ptr()), memory_model::memory_order_release, atomics::memory_order_relaxed))
@@ -414,24 +454,44 @@ namespace cds { namespace container {
             ++m_ItemCounter;
             tstat.onEnqueue();
 
+            release(id);
+
             return true;
         }
 
-        void free_chain(marked_ptr head, marked_ptr newHead)
+        void free_chain(marked_ptr head, marked_ptr newHead, size_t id)
         {
             // "head" and "newHead" are guarded
-            if (!m_pHead.compare_exchange_strong(head, marked_ptr(newHead.ptr()), memory_model::memory_order_release, atomics::memory_order_relaxed)) {
+            if (!m_pHead.compare_exchange_strong(head, marked_ptr(newHead.ptr()), memory_model::memory_order_release, atomics::memory_order_acquire)) {
+              assign(head, id + m_ids);
               return;
             }
-            typename gc::template GuardArray<2> guards;
-            guards.assign(0, node_traits::to_value_ptr(head.ptr()));
-            while (head.ptr() != newHead.ptr()) {
-                marked_ptr pNext = guards.protect(1, head->m_pNext, [](marked_ptr p) -> node_type * { return node_traits::to_value_ptr(p.ptr()); });
-                assert(is_deleted(head));
-                dispose_node(head.ptr());
-                guards.copy(0, 1);
-                head = pNext;
+            assign(newHead, id + m_ids);
+            head = m_pCapacity.exchange(marked_ptr{nullptr}, std::memory_order_acquire);
+            if(head == nullptr) {
+              return;
             }
+            int min_id = std::accumulate(m_thread_hazard.begin(), m_thread_hazard.end(), -1, [](int state, hazard_node& element) -> int{
+              int v = element.value.load(std::memory_order_acquire);
+              return (v != -1 && v < state) ? v : state;
+            });
+            assert(min_id != -1);
+            int current_id = head->m_basket_id;
+            typename base_class::disposer disposer;
+            size_t free_count = 0;
+            while(current_id < min_id && head.ptr() != newHead.ptr()) {
+              auto tmp = head->m_pNext.load(std::memory_order_relaxed);
+              assert(is_deleted(head));
+              node_type* p = node_traits::to_value_ptr(head.ptr());
+              if(p != &m_Dummy) {
+                clear_links(p);
+                disposer(p);
+                free_count++;
+              }
+              head = tmp;
+            }
+            std::cout << "Freeing " << free_count << std::endl;
+            m_pCapacity.store(head, std::memory_order_release);
         }
 
         void dispose_node(base_node_type *p)
@@ -463,48 +523,45 @@ namespace cds { namespace container {
             marked_ptr pNext;
 
             while (true) {
-                h = res.guards.protect(0, m_pHead, [](marked_ptr p) -> node_type * { return node_traits::to_value_ptr(p.ptr()); });
-                pNext = res.guards.protect(2, h->m_pNext, [](marked_ptr p) -> node_type * { return node_traits::to_value_ptr(p.ptr()); });
+                h = protect(m_pHead, id + m_ids);
                 // h = node_traits::to_value_ptr(m_pHead.load(std::memory_order_acquire).ptr());
-                // pNext = node_traits::to_value_ptr(h->m_pNext.load(std::memory_order_acquire).ptr());
+                pNext = node_traits::to_value_ptr(h->m_pNext.load(std::memory_order_acquire).ptr());
 
                 marked_ptr iter(h);
                 size_t hops = 0;
 
-                typename gc::Guard g;
-
                 while (pNext.ptr() && is_deleted(iter)) {
                     iter = pNext;
-                    g.assign(res.guards.template get<node_type>(2));
-                    pNext = res.guards.protect(2, pNext->m_pNext, [](marked_ptr p) -> node_type * { return node_traits::to_value_ptr(p.ptr()); });
-                    // pNext = pNext->m_pNext.load(std::memory_order_acquire);
+                    pNext = pNext->m_pNext.load(std::memory_order_acquire);
                     ++hops;
                 }
 
                 if (pNext.ptr() == nullptr) {
                     if (hops >= m_nMaxHops) {
-                      free_chain(h, iter);
+                      free_chain(h, iter, id);
                     }
                     tstat.onEmptyDequeue();
+                    release(id + m_ids);
                     return false;
                 } else if (!is_deleted(iter)) {
                     auto value_node = node_traits::to_value_ptr(*iter.ptr());
                     if (bDeque) {
                         if (value_node->m_bag.extract(res.value, id)) {
                             if (hops >= m_nMaxHops) {
-                              free_chain(h, iter);
+                              free_chain(h, iter, id);
                             }
                             //res.basket_id = value_node->m_basket_id;
                             break;
                         } else {
                             // empty node, mark it as deleted.
                             if (make_deleted(iter)) {
-                                free_chain(h, pNext);
+                                free_chain(h, pNext, id);
                             }
                         }
                     } else {
                         // Not sure how thread safe that is
                         // res.basket_id = pNext->m_basket_id;
+                        release(id + m_ids);
                         return !value_node->m_bag.empty();
                     }
                 }
@@ -519,6 +576,7 @@ namespace cds { namespace container {
                 tstat.onDequeue();
             }
 
+            release(id + m_ids);
             return true;
         }
 

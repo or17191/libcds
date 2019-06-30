@@ -550,7 +550,7 @@ namespace {
     };
 
     struct htm_id_traits : cds::container::sb_basket_queue::traits {
-      typedef cds::intrusive::htm_basket_queue::htm_insert<50, 20, 5> insert_policy;
+      typedef cds::intrusive::htm_basket_queue::htm_insert<20, 20, 5> insert_policy;
     };
     struct htm_mod_id_traits : cds::container::sb_basket_queue::traits {
       typedef cds::intrusive::htm_basket_queue::htm_insert<20, 20, 5> insert_policy;
