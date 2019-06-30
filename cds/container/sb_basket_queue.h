@@ -170,14 +170,20 @@ namespace cds { namespace container {
             scoped_node_ptr node{nullptr};
             cds::uuid_type last_node{0};
             char pad1_[cds::c_nCacheLineSize - sizeof(scoped_node_ptr) - sizeof(cds::uuid_type)];
-        };
+        } __attribute__((aligned (cds::c_nCacheLineSize)));
         std::unique_ptr<thread_data[]> m_nodes_cache;
+        struct padded_stat {
+          stat value;
+        } __attribute__((aligned (cds::c_nCacheLineSize)));
+        std::vector<padded_stat> m_thread_stat;
+        bool stat_copied = false;
 
     public:
         /// Initializes empty queue
         SBBasketQueue(size_t ids)
             : m_Dummy(ids), m_ids(ids),
-              m_nodes_cache(new thread_data[m_ids]())
+              m_nodes_cache(new thread_data[m_ids]()),
+              m_thread_stat(ids * 2)
         {
           // m_Dummy.m_basket_id = static_cast<cds::uuid_type>(-1);
         }
@@ -282,8 +288,14 @@ namespace cds { namespace container {
         }
 
         /// Returns reference to internal statistics
-        const stat &statistics() const
+        const stat &statistics()
         {
+            if(!stat_copied) {
+              stat_copied = true;
+              for(auto& e: m_thread_stat) {
+                m_Stat += e.value;
+              }
+            }
             return m_Stat;
         }
 
@@ -303,6 +315,7 @@ namespace cds { namespace container {
         template <class Arg>
         bool do_enqueue(thread_data &th, Arg &&tmp_val, size_t id)
         {
+            auto& tstat = m_thread_stat[id].value;
             auto& node_ptr = th.node;
             value_type val(std::forward<Arg>(tmp_val));
             base_node_type* pNew{nullptr};
@@ -332,7 +345,7 @@ namespace cds { namespace container {
                     auto node = node_traits::to_value_ptr(t.ptr());
                     auto copy_t = t;
                     if (!m_pTail.compare_exchange_strong(copy_t, marked_ptr(pNew), memory_model::memory_order_release, atomics::memory_order_relaxed))
-                        m_Stat.onAdvanceTailFailed();
+                        tstat.onAdvanceTailFailed();
                     // if(cds_unlikely(th.last_node == node->m_basket_id)) {
                     //   std::stringstream s;
                     //   s << "My bag " << std::hex << th.last_node << ' ' << node->m_basket_id << ' ' << id;
@@ -347,7 +360,7 @@ namespace cds { namespace container {
                     }
                 } else if ( res == insert_policy::InsertResult::FAILED_INSERT ) {
                     // Try adding to basket
-                    m_Stat.onTryAddBasket();
+                    tstat.onTryAddBasket();
 
                     // add to the basket
                     bkoff();
@@ -358,7 +371,7 @@ namespace cds { namespace container {
                     //   throw std::logic_error(s.str());
                     // }
                     if (cds_likely(node->m_bag.insert(val, id, std::false_type{}))) {
-                        m_Stat.onAddBasket();
+                        tstat.onAddBasket();
                         // th.last_node = node->m_basket_id;
                         break;
                     } else {
@@ -369,7 +382,7 @@ namespace cds { namespace container {
                     typename gc::template GuardArray<2> g;
                     g.assign(0, node_traits::to_value_ptr(t.ptr()));
                     if (m_pTail.load(memory_model::memory_order_acquire) != t) {
-                        m_Stat.onEnqueueRace();
+                        tstat.onEnqueueRace();
                         bkoff();
                         continue;
                     }
@@ -390,16 +403,16 @@ namespace cds { namespace container {
                     }
                     auto copy_t = t;
                     if (!bTailOk || !m_pTail.compare_exchange_weak(copy_t, marked_ptr(pNext.ptr()), memory_model::memory_order_release, atomics::memory_order_relaxed))
-                        m_Stat.onAdvanceTailFailed();
+                        tstat.onAdvanceTailFailed();
 
-                    m_Stat.onBadTail();
+                    tstat.onBadTail();
                 }
 
-                m_Stat.onEnqueueRace();
+                tstat.onEnqueueRace();
             }
 
             ++m_ItemCounter;
-            m_Stat.onEnqueue();
+            tstat.onEnqueue();
 
             return true;
         }
@@ -442,6 +455,7 @@ namespace cds { namespace container {
         {
             // Note:
             // If bDeque == false then the function is called from empty method and no real dequeuing operation is performed
+            auto& tstat = m_thread_stat[id + m_ids].value;
 
             back_off bkoff;
 
@@ -471,7 +485,7 @@ namespace cds { namespace container {
                     if (hops >= m_nMaxHops) {
                       free_chain(h, iter);
                     }
-                    m_Stat.onEmptyDequeue();
+                    tstat.onEmptyDequeue();
                     return false;
                 } else if (!is_deleted(iter)) {
                     auto value_node = node_traits::to_value_ptr(*iter.ptr());
@@ -496,13 +510,13 @@ namespace cds { namespace container {
                 }
 
                 if (bDeque)
-                    m_Stat.onDequeueRace();
+                    tstat.onDequeueRace();
                 bkoff();
             }
 
             if (bDeque) {
                 --m_ItemCounter;
-                m_Stat.onDequeue();
+                tstat.onDequeue();
             }
 
             return true;
