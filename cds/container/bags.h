@@ -225,7 +225,7 @@ namespace cds { namespace container {
             bool extract(T &t, size_t id) {
               const size_t size = m_size;
               size_t index;
-              while((index = status.value.fetch_add(1, std::memory_order_acquire)) <= size) {
+              while((index = status.value.fetch_add(1, std::memory_order_acquire)) < size) {
                 if(attempt_pop(t, m_bag[index].value) == EXTRACT) {
                   return true;
                 }
