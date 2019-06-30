@@ -80,7 +80,7 @@ namespace {
        using value_type = Value;
        using gc_type = cds::gc::HP;
        using clock_type = std::chrono::steady_clock;
-       using duration_type = std::chrono::milliseconds;
+       using duration_type = std::chrono::microseconds;
     protected:
 
         enum {
@@ -421,8 +421,10 @@ namespace {
                     writer_duration += producer.m_Duration;
                 }
             }
-            double ns_reader_throughput = (reader_duration.count() * 1000.) / (s_nQueueSize);
-            double ns_writer_throughput = (writer_duration.count() * 1000.) / (s_nQueueSize - s_nPreStoreSize);
+            auto ns_reader_duration = std::chrono::duration_cast<std::chrono::nanoseconds>(reader_duration);
+            auto ns_writer_duration = std::chrono::duration_cast<std::chrono::nanoseconds>(writer_duration);
+            double ns_reader_throughput = double(ns_reader_duration.count()) / (s_nQueueSize);
+            double ns_writer_throughput = double(ns_writer_duration.count()) / (s_nQueueSize - s_nPreStoreSize);
 
             propout() << std::make_pair( "reader_throughput_nsop", ns_reader_throughput );
             propout() << std::make_pair( "writer_throughput_nsop", ns_writer_throughput );

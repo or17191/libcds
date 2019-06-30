@@ -73,7 +73,7 @@ namespace {
        using value_type = Value;
        using gc_type = cds::gc::HP;
        using clock_type = std::chrono::steady_clock;
-       using duration_type = std::chrono::milliseconds;
+       using duration_type = std::chrono::microseconds;
     protected:
 
         enum {
@@ -322,7 +322,9 @@ namespace {
                 consumer_type& consumer = static_cast<consumer_type&>( thr );
                 reader_duration += consumer.m_Duration;
             }
-            double ns_reader_throughput = (reader_duration.count() * 1000.) / (s_nQueueSize);
+            auto ns_reader_duration = std::chrono::duration_cast<std::chrono::nanoseconds>(reader_duration);
+
+            double ns_reader_throughput = double(ns_reader_duration.count()) / (s_nQueueSize);
 
             propout() << std::make_pair( "reader_throughput_nsop", ns_reader_throughput );
             std::cout << "[ STAT     ] Reader Throughput = " << ns_reader_throughput << "ns/op" << std::endl;

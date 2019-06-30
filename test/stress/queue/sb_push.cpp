@@ -56,7 +56,7 @@ namespace {
         typedef cds_test::stress_fixture base_class;
     public:
        using clock_type = std::chrono::steady_clock;
-       using duration_type = std::chrono::milliseconds;
+       using duration_type = std::chrono::microseconds;
 
     protected:
 
@@ -242,7 +242,9 @@ namespace {
             }
             propout() << std::make_pair( "failed_push", nPushFailed );
 
-            double ns_throughput = (totalDuration.count() * 1000.) / (s_nQueueSize);
+            auto ns_duration = std::chrono::duration_cast<std::chrono::nanoseconds>(totalDuration);
+
+            double ns_throughput = double(ns_duration.count()) / (s_nQueueSize);
             propout() << std::make_pair( "throughput_nsop", ns_throughput );
             std::cout << "[ STAT     ] Throughput = " << ns_throughput << "ns/op" << std::endl;
 
