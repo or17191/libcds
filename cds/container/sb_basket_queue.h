@@ -11,6 +11,7 @@
 #include <cds/container/basket_queue.h>
 #include <cds/container/details/base.h>
 #include <cds/intrusive/basket_queue.h>
+#include <cds/sync/htm.h>
 
 namespace cds { namespace container {
 
@@ -393,15 +394,18 @@ namespace cds { namespace container {
     private:
         static bool is_deleted(marked_ptr p) {
           auto node_ptr = node_traits::to_value_ptr(p.ptr());
-          return node_ptr->deleted.load(memory_model::memory_order_acquire);
+          //return node_ptr->deleted.load(memory_model::memory_order_acquire);
+          return node_ptr->m_bag.empty();
         }
         static bool make_deleted(marked_ptr p) {
-          auto node_ptr = node_traits::to_value_ptr(p.ptr());
-          bool status = node_ptr->deleted.load(std::memory_order_relaxed);
-          if(status != false) {
-            return false;
-          }
-          return node_ptr->deleted.compare_exchange_strong(status, true, memory_model::memory_order_release, memory_model::memory_order_relaxed);
+          //auto& deleted = node_traits::to_value_ptr(p.ptr())->deleted;
+          //deleted.store(true, std::memory_order_release);
+          return true;
+          //bool status = node_ptr->deleted.load(std::memory_order_relaxed);
+          //if(status != false) {
+          //  return false;
+          //}
+          //return node_ptr->deleted.compare_exchange_strong(status, true, memory_model::memory_order_release, memory_model::memory_order_relaxed);
         }
 
         marked_ptr protect(atomic_marked_ptr& p, size_t id) {
@@ -549,19 +553,73 @@ namespace cds { namespace container {
             return true;
         }
 
+        static bool txn_cas(atomic_marked_ptr& ptr, marked_ptr old_value, marked_ptr new_value) {
+          int ret;
+          while(ptr.load(std::memory_order_relaxed) == old_value) {
+            if((ret = _xbegin()) == _XBEGIN_STARTED) {
+              if(ptr.load(std::memory_order_relaxed) != old_value) {
+                _xabort(0x1);
+              }
+              ptr.store(new_value, std::memory_order_relaxed);
+              _xend();
+              return true;
+            }
+            if(ret & _XABORT_EXPLICIT) {
+              return false;
+            }
+          }
+          return false;
+        }
+        
+        static bool atomic_cas(atomic_marked_ptr& ptr, marked_ptr old_value, marked_ptr new_value) {
+            if (ptr.load(std::memory_order_relaxed) != old_value) {
+              return false;
+            }
+            return ptr.compare_exchange_strong(old_value, new_value,
+                memory_model::memory_order_acq_rel, atomics::memory_order_acquire);
+        }
+
+        static marked_ptr txn_test_and_set(atomic_marked_ptr& ptr, marked_ptr new_value) {
+          int ret;
+          if(ptr.load(std::memory_order_relaxed) == new_value) {
+            return new_value;
+          }
+          marked_ptr old_value;
+          while(ptr.load(std::memory_order_relaxed) != new_value) {
+            if((ret = _xbegin()) == _XBEGIN_STARTED) {
+              old_value = ptr.load(std::memory_order_relaxed);
+              if(old_value == new_value) {
+                _xabort(0x1);
+              }
+              ptr.store(new_value, std::memory_order_relaxed);
+              _xend();
+              return old_value;
+            }
+            if(ret & _XABORT_EXPLICIT) {
+              return new_value;
+            }
+          }
+          return new_value;
+        }
+        
+        static marked_ptr atomic_test_and_set(atomic_marked_ptr& ptr, marked_ptr new_value) {
+            marked_ptr old_value = ptr.load(std::memory_order_relaxed);
+            if(old_value == new_value) {
+              return new_value;
+            }
+            old_value = ptr.exchange(new_value, std::memory_order_acquire);
+            return old_value;
+        }
+
         void free_chain(marked_ptr head, marked_ptr newHead, size_t id)
         {
             auto& tstat = m_thread_stat[id + m_ids].value;
             // "head" and "newHead" are guarded
-            if (!m_pHead.compare_exchange_strong(head, marked_ptr(newHead.ptr()), memory_model::memory_order_release, atomics::memory_order_acquire)) {
+            if(!txn_cas(m_pHead, head, newHead)) {
               return;
             }
-            head = m_pCapacity.load(std::memory_order_relaxed);
-            if(head == nullptr) {
-              return;
-            }
-            head = m_pCapacity.exchange(marked_ptr{nullptr}, std::memory_order_acquire);
-            if(head == nullptr) {
+            head = txn_test_and_set(m_pCapacity, marked_ptr(nullptr));
+            if(!head.ptr()) {
               return;
             }
             int min_id = std::accumulate(m_thread_hazard.begin(), m_thread_hazard.end(),

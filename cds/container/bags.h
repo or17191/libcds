@@ -171,11 +171,11 @@ namespace cds { namespace container {
                 assert(m_size <= MAX_THREADS);
             }
             static int attempt_pop(T& t, value& v) {
-              int flag = v.flag.load(std::memory_order_relaxed);
-              if (flag == EMPTY) {
-                return flag;
-              }
-              flag = v.flag.exchange(EMPTY, std::memory_order_release);
+              // int flag = v.flag.load(std::memory_order_relaxed);
+              // if (flag == EMPTY) {
+              //   return flag;
+              // }
+              int flag = v.flag.exchange(EMPTY, std::memory_order_release);
               // We still get a lot of EMPTYs here
               if(flag == EXTRACT) {
                 t = std::move(v.value);
@@ -183,7 +183,6 @@ namespace cds { namespace container {
               }
               return flag;
             }
-            /*
             bool extract(T &t, size_t id) {
               const size_t size = m_size;
               size_t index;
@@ -194,8 +193,6 @@ namespace cds { namespace container {
               }
               return false;
             }
-            */
-            /*
             template <class First>
             bool insert(T &t, size_t id, First)
             {
@@ -211,7 +208,7 @@ namespace cds { namespace container {
                   return false;
                 }
             }
-            */
+            /*
             template <class First>
             bool insert(T &t, const size_t id, First)
             {
@@ -286,9 +283,10 @@ namespace cds { namespace container {
               last_pos = nullptr;
               return false;
             }
+            */
             bool empty() const {
-              // return status.value.load(std::memory_order_acquire) >= m_size;
-              return status.value.load(std::memory_order_acquire) == EMPTY;
+              return status.value.load(std::memory_order_acquire) >= m_size;
+              //return status.value.load(std::memory_order_acquire) == EMPTY;
             }
         };
 
