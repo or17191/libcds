@@ -23,8 +23,10 @@ namespace cds { namespace container {
         {
             using base_type = intrusive::basket_queue::stat<Counter>;
             typename base_type::counter_type m_FalseExtract;    ///< Count the number of times an extract failed
+            typename base_type::counter_type m_FreeNode;    ///< Count the number of times an extract failed
 
             void onFalseExtract()           { ++m_FalseExtract; }
+            void onFreeNode()           { ++m_FreeNode; }
 
             base_type& base() { return static_cast<base_type&>(*this); }
             const base_type& base () const { return static_cast<const base_type&>(*this); }
@@ -35,12 +37,14 @@ namespace cds { namespace container {
             {
                 base_type::reset();
                 m_FalseExtract.reset();
+                m_FreeNode.reset();
             }
 
             stat& operator +=( stat const& s )
             {
                 base_type::operator +=(s);
                 m_FalseExtract    += s.m_FalseExtract.get();
+                m_FreeNode    += s.m_FreeNode.get();
                 return *this;
             }
             //@endcond
@@ -51,8 +55,8 @@ namespace cds { namespace container {
         {
             //@cond
             void onFalseExtract()       const {}
+            void onFreeNode()       const {}
 
-            void reset() {}
             empty_stat& operator +=( empty_stat const& )
             {
                 return *this;
@@ -464,7 +468,7 @@ namespace cds { namespace container {
                   link_checker::is_empty(pNew);
                 }
 
-                const marked_ptr t = assign(m_pTail, id);
+                const marked_ptr t = m_pTail.load(std::memory_order_acquire);
 
                 marked_ptr pNext{};
                 pNew->m_basket_id = t->m_basket_id + 1;
@@ -547,11 +551,11 @@ namespace cds { namespace container {
 
         void free_chain(marked_ptr head, marked_ptr newHead, size_t id)
         {
+            auto& tstat = m_thread_stat[id + m_ids].value;
             // "head" and "newHead" are guarded
             if (!m_pHead.compare_exchange_strong(head, marked_ptr(newHead.ptr()), memory_model::memory_order_release, atomics::memory_order_acquire)) {
               return;
             }
-            assign(newHead, id + m_ids);
             head = m_pCapacity.load(std::memory_order_relaxed);
             if(head == nullptr) {
               return;
@@ -575,6 +579,7 @@ namespace cds { namespace container {
               if(p != &m_Dummy) {
                 clear_links(p);
                 disposer(p);
+                tstat.onFreeNode();
               }
               head = tmp;
             }
@@ -608,12 +613,9 @@ namespace cds { namespace container {
 
             marked_ptr h = protect(m_pHead, id + m_ids);
             marked_ptr iter(h);
-            marked_ptr pNext(nullptr);
+            marked_ptr pNext = iter->m_pNext.load(std::memory_order_acquire);
 
             while (true) {
-                if(pNext.ptr() == nullptr) {
-                  pNext = node_traits::to_value_ptr(iter->m_pNext.load(std::memory_order_acquire).ptr());
-                }
 
                 size_t hops = 0;
 
@@ -652,11 +654,11 @@ namespace cds { namespace container {
                           free_chain(h, pNext, id);
                       }
                       iter = pNext;
-                      pNext = marked_ptr(nullptr);
+                      pNext = pNext->m_pNext.load(std::memory_order_acquire);
                   }
                 } else {
                   iter = pNext;
-                  pNext = marked_ptr(nullptr);
+                  pNext = pNext->m_pNext.load(std::memory_order_acquire);
                 }
 
                 if (bDeque)

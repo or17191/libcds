@@ -668,7 +668,8 @@ namespace cds_test {
     {
         return o
           << s.base()
-          << CDSSTRESS_STAT_OUT(s, m_FalseExtract);
+          << CDSSTRESS_STAT_OUT(s, m_FalseExtract)
+          << CDSSTRESS_STAT_OUT(s, m_FreeNode);
     }
 
 } // namespace cds_test
