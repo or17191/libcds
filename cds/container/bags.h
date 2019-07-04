@@ -213,7 +213,7 @@ namespace cds { namespace container {
             }
             */
             template <class First>
-            bool insert(T &t, size_t id, First)
+            bool insert(T &t, const size_t id, First)
             {
                 assert(id < m_size);
                 auto &v = m_bag[id].value;

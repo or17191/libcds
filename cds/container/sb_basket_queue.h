@@ -271,6 +271,7 @@ namespace cds { namespace container {
         {
           // m_Dummy.m_basket_id = static_cast<cds::uuid_type>(-1);
           m_Dummy.m_basket_id = 1;
+          m_Dummy.m_pNext.store(marked_ptr(nullptr), std::memory_order_relaxed);
         }
 
         /// Destructor clears the queue
@@ -307,7 +308,7 @@ namespace cds { namespace container {
             Returns \p true if success, \p false otherwise.
         */
         template <class Arg>
-        bool enqueue(Arg &&val, size_t id)
+        bool enqueue(Arg &&val, const size_t id)
         {
             auto &p = m_nodes_cache[id];
             if (do_enqueue(p, std::forward<Arg>(val), id)) {
@@ -328,7 +329,7 @@ namespace cds { namespace container {
             dequeued value. The assignment operator for \p value_type is invoked.
             If queue is empty, the function returns \p false, \p dest is unchanged.
         */
-        bool dequeue(value_type &dest, size_t tid, uuid_type *basket_id = nullptr)
+        bool dequeue(value_type &dest, const size_t tid, uuid_type *basket_id = nullptr)
         {
 
             dequeue_result res;
@@ -419,12 +420,15 @@ namespace cds { namespace container {
           haz.store(-1, std::memory_order_release);
         }
 
+        static bool allowd_to_advance(std::atomic<int>& haz, int new_id) {
+          int old_id = haz.load(std::memory_order_acquire);
+          return old_id <= new_id && old_id != -1;
+        }
+
         marked_ptr assign(marked_ptr p, size_t id) {
           auto& haz = m_thread_hazard[id].value;
-          auto new_id = p->m_basket_id;
-          assert(
-              haz.load(std::memory_order_relaxed) <= new_id &&
-              haz.load(std::memory_order_relaxed) != -1);
+          int new_id = p->m_basket_id;
+          assert(allowd_to_advance(haz, new_id));
           haz.store(new_id, std::memory_order_acq_rel);
           return p;
         }
@@ -435,7 +439,7 @@ namespace cds { namespace container {
         }
 
         template <class Arg>
-        bool do_enqueue(thread_data &th, Arg &&tmp_val, size_t id)
+        bool do_enqueue(thread_data &th, Arg &&tmp_val, const size_t id)
         {
             auto& tstat = m_thread_stat[id].value;
             auto& node_ptr = th.node;
@@ -450,6 +454,9 @@ namespace cds { namespace container {
                 if(!node_ptr) {
                   node_ptr.reset(alloc_node());
                   assert(node_ptr.get() != nullptr);
+                  assert(pNew == nullptr);
+                  node_ptr.get()->m_pNext.store(marked_ptr(nullptr), std::memory_order_relaxed);
+                  link_checker::is_empty(node_ptr.get());
                   // node_ptr->m_basket_id = uuid();
                 }
                 if(!pNew) {
@@ -560,17 +567,14 @@ namespace cds { namespace container {
               return (v != -1 && v < state) ? v : state;
             });
             assert(min_id != -1);
-            int current_id = head->m_basket_id;
             typename base_class::disposer disposer;
-            size_t free_count = 0;
-            while(current_id < min_id && head.ptr() != newHead.ptr()) {
+            while(head->m_basket_id < min_id && head.ptr() != newHead.ptr()) {
               auto tmp = head->m_pNext.load(std::memory_order_relaxed);
               assert(is_deleted(head));
               node_type* p = node_traits::to_value_ptr(head.ptr());
               if(p != &m_Dummy) {
                 clear_links(p);
                 disposer(p);
-                free_count++;
               }
               head = tmp;
             }
@@ -594,7 +598,7 @@ namespace cds { namespace container {
             }
         }
 
-        bool do_dequeue(dequeue_result &res, bool bDeque, size_t id)
+        bool do_dequeue(dequeue_result &res, bool bDeque, const size_t id)
         {
             // Note:
             // If bDeque == false then the function is called from empty method and no real dequeuing operation is performed
