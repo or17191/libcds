@@ -525,14 +525,14 @@ namespace cds { namespace container {
 
             back_off bkoff;
 
-            marked_ptr h;
-            marked_ptr pNext;
-
-            h = protect(m_pHead, id + m_ids);
+            marked_ptr h = protect(m_pHead, id + m_ids);
             marked_ptr iter(h);
+            marked_ptr pNext(nullptr);
 
             while (true) {
-                pNext = node_traits::to_value_ptr(iter->m_pNext.load(std::memory_order_acquire).ptr());
+                if(pNext.ptr() == nullptr) {
+                  pNext = node_traits::to_value_ptr(iter->m_pNext.load(std::memory_order_acquire).ptr());
+                }
 
                 size_t hops = 0;
 
@@ -564,6 +564,7 @@ namespace cds { namespace container {
                                 free_chain(h, pNext, id);
                             }
                             iter = pNext;
+                            pNext = marked_ptr(nullptr);
                         }
                     } else {
                         // Not sure how thread safe that is
@@ -573,6 +574,7 @@ namespace cds { namespace container {
                     }
                 } else {
                   iter = pNext;
+                  pNext = marked_ptr(nullptr);
                 }
 
                 if (bDeque)
