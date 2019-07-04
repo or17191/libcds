@@ -345,7 +345,7 @@ namespace cds { namespace container {
         marked_ptr assign(marked_ptr p, size_t id) {
           auto& haz = m_thread_hazard[id].value;
           auto new_id = p->m_basket_id;
-          assert(haz.load(std::memory_order_relaxed) < new_id && haz.load(std::memory_order_relaxed) != -1);
+          assert(haz.load(std::memory_order_relaxed) <= new_id && haz.load(std::memory_order_relaxed) != -1);
           haz.store(new_id, std::memory_order_acq_rel);
           return p;
         }
@@ -471,7 +471,9 @@ namespace cds { namespace container {
             if(head == nullptr) {
               return;
             }
-            int min_id = std::accumulate(m_thread_hazard.begin(), m_thread_hazard.end(), -1, [](int state, hazard_node& element) -> int{
+            int min_id = std::accumulate(m_thread_hazard.begin(), m_thread_hazard.end(),
+                std::numeric_limits<int>::max(),
+                [](int state, hazard_node& element) -> int{
               int v = element.value.load(std::memory_order_acquire);
               return (v != -1 && v < state) ? v : state;
             });
@@ -490,7 +492,6 @@ namespace cds { namespace container {
               }
               head = tmp;
             }
-            std::cout << "Freeing " << free_count << std::endl;
             m_pCapacity.store(head, std::memory_order_release);
         }
 
