@@ -160,7 +160,8 @@ namespace cds { namespace container {
             using value_type = PaddedValue<value>;
             static constexpr size_t MAX_THREADS=40;
             std::array<value_type, MAX_THREADS> m_bag;
-            TwicePaddedValue<std::atomic<int>> status{0};
+            // TwicePaddedValue<std::atomic<int>> status{0};
+            TwicePaddedValue<std::atomic<int>> status{INSERT};
             const size_t m_size;
 
         public:
@@ -169,6 +170,48 @@ namespace cds { namespace container {
             {
                 assert(m_size <= MAX_THREADS);
             }
+            static int attempt_pop(T& t, value& v) {
+              int flag = v.flag.load(std::memory_order_relaxed);
+              if (flag == EMPTY) {
+                return flag;
+              }
+              flag = v.flag.exchange(EMPTY, std::memory_order_release);
+              // We still get a lot of EMPTYs here
+              if(flag == EXTRACT) {
+                t = std::move(v.value);
+                return flag;
+              }
+              return flag;
+            }
+            /*
+            bool extract(T &t, size_t id) {
+              const size_t size = m_size;
+              size_t index;
+              while((index = status.value.fetch_add(1, std::memory_order_acquire)) < size) {
+                if(attempt_pop(t, m_bag[index].value) == EXTRACT) {
+                  return true;
+                }
+              }
+              return false;
+            }
+            */
+            /*
+            template <class First>
+            bool insert(T &t, size_t id, First)
+            {
+                assert(id < m_size);
+                auto &v = m_bag[id].value;
+                int flag = INSERT;
+                v.value = std::move(t);
+                bool ret = v.flag.compare_exchange_strong(flag, EXTRACT, std::memory_order_acq_rel);
+                if(ret) {
+                  return true;
+                } else {
+                  t = std::move(v.value);
+                  return false;
+                }
+            }
+            */
             template <class First>
             bool insert(T &t, size_t id, First)
             {
@@ -196,43 +239,6 @@ namespace cds { namespace container {
                 }
                 return false;
             }
-            /*
-            template <class First>
-            bool insert(T &t, size_t id, First)
-            {
-                assert(id < m_size);
-                auto &v = m_bag[id].value;
-                int flag = INSERT;
-                v.value = std::move(t);
-                bool ret = v.flag.compare_exchange_strong(flag, EXTRACT, std::memory_order_acq_rel);
-                if(ret) {
-                  return true;
-                } else {
-                  t = std::move(v.value);
-                  return false;
-                }
-            }
-            */
-            static int attempt_pop(T& t, value& v) {
-              int flag = v.flag.exchange(EMPTY, std::memory_order_release);
-              // We still get a lot of EMPTYs here
-              if(flag == EXTRACT) {
-                t = std::move(v.value);
-                return flag;
-              }
-              return flag;
-            }
-            bool extract(T &t, size_t id) {
-              const size_t size = m_size;
-              size_t index;
-              while((index = status.value.fetch_add(1, std::memory_order_acquire)) < size) {
-                if(attempt_pop(t, m_bag[index].value) == EXTRACT) {
-                  return true;
-                }
-              }
-              return false;
-            }
-            /*
             bool extract(T &t, size_t id) {
               const size_t size = m_size;
               int current_status = status.value.load(std::memory_order_acquire);
@@ -280,9 +286,9 @@ namespace cds { namespace container {
               last_pos = nullptr;
               return false;
             }
-            */
             bool empty() const {
-              return status.value.load(std::memory_order_acquire) >= m_size;
+              // return status.value.load(std::memory_order_acquire) >= m_size;
+              return status.value.load(std::memory_order_acquire) == EMPTY;
             }
         };
 
