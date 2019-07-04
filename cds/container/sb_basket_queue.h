@@ -327,7 +327,7 @@ namespace cds { namespace container {
           marked_ptr p1, p2;
           p1 = p.load(std::memory_order_acquire);
           while(true) {
-            haz.store(p1->m_basket_id, std::memory_order_acquire);
+            haz.store(p1->m_basket_id, std::memory_order_seq_cst);
             p2 = p.load(std::memory_order_acquire);
             if(p1 == p2) {
               break;
@@ -527,8 +527,9 @@ namespace cds { namespace container {
             marked_ptr h;
             marked_ptr pNext;
 
+            h = protect(m_pHead, id + m_ids);
+
             while (true) {
-                h = protect(m_pHead, id + m_ids);
                 // h = node_traits::to_value_ptr(m_pHead.load(std::memory_order_acquire).ptr());
                 pNext = node_traits::to_value_ptr(h->m_pNext.load(std::memory_order_acquire).ptr());
 
@@ -562,6 +563,7 @@ namespace cds { namespace container {
                             if (make_deleted(iter)) {
                                 free_chain(h, pNext, id);
                             }
+                            h = assign(pNext, id + m_ids);
                         }
                     } else {
                         // Not sure how thread safe that is
