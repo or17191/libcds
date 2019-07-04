@@ -398,7 +398,7 @@ namespace cds { namespace container {
           }
           return node_ptr->deleted.compare_exchange_strong(status, true, memory_model::memory_order_release, memory_model::memory_order_relaxed);
         }
-        
+
         marked_ptr protect(atomic_marked_ptr& p, size_t id) {
           auto& haz = m_thread_hazard[id].value;
           marked_ptr p1, p2;
@@ -626,29 +626,30 @@ namespace cds { namespace container {
                     tstat.onEmptyDequeue();
                     release(id + m_ids);
                     return false;
-                } else if (!is_deleted(iter)) {
-                    auto value_node = node_traits::to_value_ptr(*iter.ptr());
-                    if (bDeque) {
-                        if (value_node->m_bag.extract(res.value, id)) {
-                            if (hops >= m_nMaxHops) {
-                              free_chain(h, iter, id);
-                            }
-                            //res.basket_id = value_node->m_basket_id;
-                            break;
-                        } else {
-                            // empty node, mark it as deleted.
-                            if (make_deleted(iter)) {
-                                free_chain(h, pNext, id);
-                            }
-                            iter = pNext;
-                            pNext = marked_ptr(nullptr);
-                        }
-                    } else {
-                        // Not sure how thread safe that is
-                        // res.basket_id = pNext->m_basket_id;
-                        release(id + m_ids);
-                        return !value_node->m_bag.empty();
-                    }
+                }
+                auto value_node = node_traits::to_value_ptr(*iter.ptr());
+                if(!bDeque) {
+                    // Not sure how thread safe that is
+                    // res.basket_id = pNext->m_basket_id;
+                    release(id + m_ids);
+                    return !value_node->m_bag.empty();
+                }
+                if (!is_deleted(iter)) {
+                  if (value_node->m_bag.extract(res.value, id)) {
+                      if (hops >= m_nMaxHops) {
+                        free_chain(h, iter, id);
+                      }
+                      //res.basket_id = value_node->m_basket_id;
+                      break;
+                  } else {
+                      tstat.onFalseExtract();
+                      // empty node, mark it as deleted.
+                      if (make_deleted(iter)) {
+                          free_chain(h, pNext, id);
+                      }
+                      iter = pNext;
+                      pNext = marked_ptr(nullptr);
+                  }
                 } else {
                   iter = pNext;
                   pNext = marked_ptr(nullptr);

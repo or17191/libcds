@@ -144,14 +144,14 @@ namespace cds { namespace container {
                 return size_;
             }*/
         };
+        static constexpr int INSERT = 0;
+        static constexpr int EXTRACT = 1;
+        static constexpr int EMPTY = 2;
 
         template <class T>
         class IdBag
         {
         private:
-            static constexpr int INSERT = 0;
-            static constexpr int EXTRACT = 1;
-            static constexpr int EMPTY = 2;
             struct value
             {
                 std::atomic<int> flag{INSERT};
