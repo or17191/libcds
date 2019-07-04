@@ -3,7 +3,7 @@
 // Distributed under the Boost Software License, Version 1.0. (See accompanying
 // file LICENSE or copy at http://www.boost.org/LICENSE_1_0.txt)
 
-#include "intrusive_queue_type.h"
+#include "queue_type.h"
 #include <vector>
 #include <algorithm>
 #include <unordered_map>
@@ -19,25 +19,6 @@
 
 #include <cds_test/check_baskets.h>
 #include <cds_test/topology.h>
-
-namespace cds_test {
-
-    template <typename Counter>
-    static inline property_stream& operator <<( property_stream& o, cds::container::wf_queue::full_stat<Counter> const& s )
-    {
-        return o
-            << CDSSTRESS_STAT_OUT( s, m_FastEnqueue )
-            << CDSSTRESS_STAT_OUT( s, m_FastDequeue )
-            << CDSSTRESS_STAT_OUT( s, m_SlowEnqueue )
-            << CDSSTRESS_STAT_OUT( s, m_SlowDequeue )
-            << CDSSTRESS_STAT_OUT( s, m_Empty );
-    }
-
-    static inline property_stream& operator <<( property_stream& o, cds::container::wf_queue::empty_stat const& /*s*/ )
-    {
-        return o;
-    }
-}
 
 // Multi-threaded random queue test
 namespace {
@@ -286,12 +267,12 @@ namespace {
     };
     struct htm_id_stat_traits : public htm_id_traits
     {
-        typedef cds::container::basket_queue::stat<> stat;
+        typedef cds::container::sb_basket_queue::stat<> stat;
     };
 
     struct stat_traits : public cds::container::sb_basket_queue::traits 
     {
-        typedef cds::container::basket_queue::stat<> stat;
+        typedef cds::container::sb_basket_queue::stat<> stat;
     };
 
     using HTMSBSimpleBasketQueue_HP = cds::container::SBBasketQueue<gc_type, value_type, SimpleBag, htm_traits>;

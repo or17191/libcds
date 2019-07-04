@@ -18,25 +18,6 @@
 
 #include <boost/optional.hpp>
 
-namespace cds_test {
-
-    template <typename Counter>
-    static inline property_stream& operator <<( property_stream& o, cds::container::wf_queue::full_stat<Counter> const& s )
-    {
-        return o
-            << CDSSTRESS_STAT_OUT( s, m_FastEnqueue )
-            << CDSSTRESS_STAT_OUT( s, m_FastDequeue )
-            << CDSSTRESS_STAT_OUT( s, m_SlowEnqueue )
-            << CDSSTRESS_STAT_OUT( s, m_SlowDequeue )
-            << CDSSTRESS_STAT_OUT( s, m_Empty );
-    }
-
-    static inline property_stream& operator <<( property_stream& o, cds::container::wf_queue::empty_stat const& /*s*/ )
-    {
-        return o;
-    }
-}
-
 // Multi-threaded queue push/pop test
 namespace {
 
@@ -580,7 +561,7 @@ namespace {
 
     struct htm_id_stat_traits : public htm_id_traits
     {
-        typedef cds::container::basket_queue::stat<> stat;
+        typedef cds::container::sb_basket_queue::stat<> stat;
     };
     template <class Fixture>
     using HTMSBIdBasketQueue_HP_Stat = cds::container::SBBasketQueue<typename Fixture::gc_type, typename Fixture::value_type, IdBag, htm_id_stat_traits>;

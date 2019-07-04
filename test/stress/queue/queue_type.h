@@ -17,6 +17,8 @@
 #include <cds/container/fcdeque.h>
 #include <cds/container/segmented_queue.h>
 #include <cds/container/weak_ringbuffer.h>
+#include <cds/container/wf_queue.h>
+#include <cds/container/sb_basket_queue.h>
 
 #include <cds/gc/hp.h>
 #include <cds/gc/dhp.h>
@@ -643,6 +645,30 @@ namespace cds_test {
             << CDSSTRESS_STAT_OUT( s, m_nFailedPopBack )
             << CDSSTRESS_STAT_OUT( s, m_nCollided )
             << static_cast<cds::algo::flat_combining::stat<> const&>(s);
+    }
+
+    template <typename Counter>
+    static inline property_stream& operator <<( property_stream& o, cds::container::wf_queue::full_stat<Counter> const& s )
+    {
+        return o
+            << CDSSTRESS_STAT_OUT( s, m_FastEnqueue )
+            << CDSSTRESS_STAT_OUT( s, m_FastDequeue )
+            << CDSSTRESS_STAT_OUT( s, m_SlowEnqueue )
+            << CDSSTRESS_STAT_OUT( s, m_SlowDequeue )
+            << CDSSTRESS_STAT_OUT( s, m_Empty );
+    }
+
+    static inline property_stream& operator <<( property_stream& o, cds::container::wf_queue::empty_stat const& /*s*/ )
+    {
+        return o;
+    }
+
+    template <typename Counter>
+    static inline property_stream& operator <<( property_stream& o, cds::container::sb_basket_queue::stat<Counter> const& s )
+    {
+        return o
+          << s.base()
+          << CDSSTRESS_STAT_OUT(s, m_FalseExtract);
     }
 
 } // namespace cds_test

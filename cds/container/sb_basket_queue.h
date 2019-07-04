@@ -18,20 +18,97 @@ namespace cds { namespace container {
     /** @ingroup cds_nonintrusive_helper
     */
     namespace sb_basket_queue {
+        template <typename Counter = cds::atomicity::event_counter >
+        struct stat : public intrusive::basket_queue::stat<Counter>
+        {
+            using base_type = intrusive::basket_queue::stat<Counter>;
+            typename base_type::counter_type m_FalseExtract;    ///< Count the number of times an extract failed
 
-        /// Internal statistics
-        template <typename Counter = cds::intrusive::basket_queue::stat<>::counter_type>
-        using stat = cds::container::basket_queue::stat<Counter>;
+            void onFalseExtract()           { ++m_FalseExtract; }
 
-        /// Dummy internal statistics
-        typedef cds::container::basket_queue::empty_stat empty_stat;
+            base_type& base() { return static_cast<base_type&>(*this); }
+            const base_type& base () const { return static_cast<const base_type&>(*this); }
+
+
+            //@cond
+            void reset()
+            {
+                base_type::reset();
+                m_FalseExtract.reset();
+            }
+
+            stat& operator +=( stat const& s )
+            {
+                base_type::operator +=(s);
+                m_FalseExtract    += s.m_FalseExtract.get();
+                return *this;
+            }
+            //@endcond
+        };
+
+        /// Dummy BasketQueue statistics - no counting is performed, no overhead. Support interface like \p basket_queue::stat
+        struct empty_stat : intrusive::basket_queue::empty_stat
+        {
+            //@cond
+            void onFalseExtract()       const {}
+
+            void reset() {}
+            empty_stat& operator +=( empty_stat const& )
+            {
+                return *this;
+            }
+            //@endcond
+        };
 
         /// BasketQueue default type traits
-        typedef cds::container::basket_queue::traits traits;
+        struct traits : intrusive::basket_queue::traits
+        {
+            typedef empty_stat        stat;
+            /// Node allocator
+            typedef cds::details::memkind_allocator<int>       allocator;
+        };
 
+
+        /// Metafunction converting option list to \p basket_queue::traits
+        /**
+            Supported \p Options are:
+            - \p opt::hook - hook used. Possible hooks are: \p basket_queue::base_hook, \p basket_queue::member_hook, \p basket_queue::traits_hook.
+                If the option is not specified, \p %basket_queue::base_hook<> is used.
+            - \p opt::back_off - back-off strategy used, default is \p cds::backoff::empty.
+            - \p opt::disposer - the functor used for dispose removed items. Default is \p opt::v::empty_disposer. This option is used
+                when dequeuing.
+            - \p opt::link_checker - the type of node's link fields checking. Default is \p opt::debug_check_link
+            - \p opt::item_counter - the type of item counting feature. Default is \p cds::atomicity::empty_item_counter (item counting disabled)
+                To enable item counting use \p cds::atomicity::item_counter
+            - \p opt::stat - the type to gather internal statistics.
+                Possible statistics types are: \p basket_queue::stat, \p basket_queue::empty_stat, user-provided class that supports \p %basket_queue::stat interface.
+                Default is \p %basket_queue::empty_stat (internal statistics disabled).
+            - \p opt::padding - padding for internal critical atomic data. Default is \p opt::cache_line_padding
+            - \p opt::memory_model - C++ memory ordering model. Can be \p opt::v::relaxed_ordering (relaxed memory model, the default)
+                or \p opt::v::sequential_consistent (sequentially consisnent memory model).
+
+            Example: declare \p %BasketQueue with item counting and internal statistics
+            \code
+            typedef cds::intrusive::BasketQueue< cds::gc::HP, Foo,
+                typename cds::intrusive::basket_queue::make_traits<
+                    cds::intrusive::opt:hook< cds::intrusive::basket_queue::base_hook< cds::opt::gc<cds:gc::HP> >>,
+                    cds::opt::item_counte< cds::atomicity::item_counter >,
+                    cds::opt::stat< cds::intrusive::basket_queue::stat<> >
+                >::type
+            > myQueue;
+            \endcode
+        */
         template <typename... Options>
-        using make_traits = cds::container::basket_queue::make_traits<Options...>;
-
+        struct make_traits {
+#   ifdef CDS_DOXYGEN_INVOKED
+            typedef implementation_defined type;   ///< Metafunction result
+#   else
+            typedef typename cds::opt::make_options<
+                typename cds::opt::find_type_traits< traits, Options... >::type
+                , Options...
+            >::type type;
+#   endif
+        };
     } // namespace sb_basket_queue
 
     //@cond
@@ -79,7 +156,7 @@ namespace cds { namespace container {
     } // namespace details
     //@endcond
 
-    template <typename GC, typename T, template <class> class Bag, typename Traits = basket_queue::traits>
+    template <typename GC, typename T, template <class> class Bag, typename Traits = sb_basket_queue::traits>
     class SBBasketQueue
     {
         //@cond
