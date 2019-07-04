@@ -467,6 +467,10 @@ namespace cds { namespace container {
               return;
             }
             assign(newHead, id + m_ids);
+            head = m_pCapacity.load(std::memory_order_relaxed);
+            if(head == nullptr) {
+              return;
+            }
             head = m_pCapacity.exchange(marked_ptr{nullptr}, std::memory_order_acquire);
             if(head == nullptr) {
               return;
