@@ -345,7 +345,9 @@ namespace cds { namespace container {
         marked_ptr assign(marked_ptr p, size_t id) {
           auto& haz = m_thread_hazard[id].value;
           auto new_id = p->m_basket_id;
-          assert(haz.load(std::memory_order_relaxed) <= new_id && haz.load(std::memory_order_relaxed) != -1);
+          assert(
+              haz.load(std::memory_order_relaxed) <= new_id &&
+              haz.load(std::memory_order_relaxed) != -1);
           haz.store(new_id, std::memory_order_acq_rel);
           return p;
         }
@@ -463,7 +465,6 @@ namespace cds { namespace container {
         {
             // "head" and "newHead" are guarded
             if (!m_pHead.compare_exchange_strong(head, marked_ptr(newHead.ptr()), memory_model::memory_order_release, atomics::memory_order_acquire)) {
-              assign(head, id + m_ids);
               return;
             }
             assign(newHead, id + m_ids);
@@ -528,12 +529,11 @@ namespace cds { namespace container {
             marked_ptr pNext;
 
             h = protect(m_pHead, id + m_ids);
+            marked_ptr iter(h);
 
             while (true) {
-                // h = node_traits::to_value_ptr(m_pHead.load(std::memory_order_acquire).ptr());
-                pNext = node_traits::to_value_ptr(h->m_pNext.load(std::memory_order_acquire).ptr());
+                pNext = node_traits::to_value_ptr(iter->m_pNext.load(std::memory_order_acquire).ptr());
 
-                marked_ptr iter(h);
                 size_t hops = 0;
 
                 while (pNext.ptr() && is_deleted(iter)) {
@@ -563,7 +563,7 @@ namespace cds { namespace container {
                             if (make_deleted(iter)) {
                                 free_chain(h, pNext, id);
                             }
-                            h = assign(pNext, id + m_ids);
+                            iter = pNext;
                         }
                     } else {
                         // Not sure how thread safe that is
@@ -571,6 +571,8 @@ namespace cds { namespace container {
                         release(id + m_ids);
                         return !value_node->m_bag.empty();
                     }
+                } else {
+                  iter = pNext;
                 }
 
                 if (bDeque)
