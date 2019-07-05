@@ -171,11 +171,11 @@ namespace cds { namespace container {
                 assert(m_size <= MAX_THREADS);
             }
             static int attempt_pop(T& t, value& v) {
-              // int flag = v.flag.load(std::memory_order_relaxed);
-              // if (flag == EMPTY) {
-              //   return flag;
-              // }
-              int flag = v.flag.exchange(EMPTY, std::memory_order_release);
+              int flag = v.flag.load(std::memory_order_relaxed);
+              if (flag == EMPTY) {
+                return flag;
+              }
+              flag = v.flag.exchange(EMPTY, std::memory_order_release);
               // We still get a lot of EMPTYs here
               if(flag == EXTRACT) {
                 t = std::move(v.value);
@@ -183,6 +183,7 @@ namespace cds { namespace container {
               }
               return flag;
             }
+            /*
             bool extract(T &t, size_t id) {
               const size_t size = m_size;
               size_t index;
@@ -207,8 +208,7 @@ namespace cds { namespace container {
                   t = std::move(v.value);
                   return false;
                 }
-            }
-            /*
+            }*/
             template <class First>
             bool insert(T &t, const size_t id, First)
             {
@@ -257,23 +257,41 @@ namespace cds { namespace container {
               }
               const size_t checkpoint = size >> 1;
               volatile size_t x;
-              for(size_t current_i = 0; i < size; ++current_i, ++i, ++pos) {
-                if(cds_unlikely(pos == last)) {
-                  pos = first;
+              int ret;
+              while(i < size) {
+                if((ret = _xbegin()) == _XBEGIN_STARTED) {
+                  if(status.value.load(std::memory_order_relaxed) == EMPTY) {
+                    _xabort(0x1);
+                  }
+                  for(; i < size; ++i, ++pos) {
+                    if(pos == last) {
+                      pos = first;
+                    }
+                    if(pos->value.flag.load(std::memory_order_relaxed) != EMPTY) {
+                      break;
+                    }
+                  }
+                  _xend();
                 }
-                x %= size; // Adding improves timings...
-                if(cds_unlikely(current_i == checkpoint)) {
-                  current_i = 0;
-                  if (status.value.load(std::memory_order_acquire) == EMPTY) {
-                    last_pos = nullptr;
+                if (ret == _XBEGIN_STARTED) {
+                  if(attempt_pop(t, pos->value) == EXTRACT) {
+                    last_pos = pos;
+                    last_i = i;
+                    return true;
+                  }
+                  continue;
+                }
+                if (ret == 0) {
+                  continue;
+                }
+                if(ret & _XABORT_EXPLICIT) {
+                  return false;
+                }
+                if(ret & _XABORT_CONFLICT) {
+                  if(status.value.load(std::memory_order_acquire) == EMPTY) {
                     return false;
                   }
-                }
-                int result = attempt_pop(t, pos->value);
-                if(result == EXTRACT) {
-                  last_pos = pos;
-                  last_i = i;
-                  return true;
+                  continue;
                 }
               }
               current_status = status.value.load(std::memory_order_acquire);
@@ -283,10 +301,9 @@ namespace cds { namespace container {
               last_pos = nullptr;
               return false;
             }
-            */
             bool empty() const {
-              return status.value.load(std::memory_order_acquire) >= m_size;
-              //return status.value.load(std::memory_order_acquire) == EMPTY;
+              // return status.value.load(std::memory_order_acquire) >= m_size;
+              return status.value.load(std::memory_order_acquire) == EMPTY;
             }
         };
 
