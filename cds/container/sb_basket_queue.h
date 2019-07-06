@@ -579,7 +579,7 @@ namespace cds { namespace container {
         static marked_ptr txn_test_and_set(atomic_marked_ptr& ptr, marked_ptr new_value) {
           int ret;
           marked_ptr old_value;
-          while(ptr.load(std::memory_order_relaxed) != new_value) {
+          while(true) {
             if((ret = _xbegin()) == _XBEGIN_STARTED) {
               old_value = ptr.load(std::memory_order_relaxed);
               if(old_value == new_value) {
