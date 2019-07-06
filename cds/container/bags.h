@@ -261,33 +261,82 @@ namespace cds { namespace container {
               while(i < size) {
                 if((ret = _xbegin()) == _XBEGIN_STARTED) {
                   if(status.value.load(std::memory_order_relaxed) == EMPTY) {
-                    _xabort(0x1);
+                    _xabort(0xff);
                   }
                   for(; i < size; ++i, ++pos) {
                     if(pos == last) {
                       pos = first;
                     }
                     if(pos->value.flag.load(std::memory_order_relaxed) != EMPTY) {
-                      break;
+                      switch(i) {
+                        case 0: _xabort(0); break;
+                        case 1: _xabort(1); break;
+                        case 2: _xabort(2); break;
+                        case 3: _xabort(3); break;
+                        case 4: _xabort(4); break;
+                        case 5: _xabort(5); break;
+                        case 6: _xabort(6); break;
+                        case 7: _xabort(7); break;
+                        case 8: _xabort(8); break;
+                        case 9: _xabort(9); break;
+                        case 10: _xabort(10); break;
+                        case 11: _xabort(11); break;
+                        case 12: _xabort(12); break;
+                        case 13: _xabort(13); break;
+                        case 14: _xabort(14); break;
+                        case 15: _xabort(15); break;
+                        case 16: _xabort(16); break;
+                        case 17: _xabort(17); break;
+                        case 18: _xabort(18); break;
+                        case 19: _xabort(19); break;
+                        case 20: _xabort(20); break;
+                        case 21: _xabort(21); break;
+                        case 22: _xabort(22); break;
+                        case 23: _xabort(23); break;
+                        case 24: _xabort(24); break;
+                        case 25: _xabort(25); break;
+                        case 26: _xabort(26); break;
+                        case 27: _xabort(27); break;
+                        case 28: _xabort(28); break;
+                        case 29: _xabort(29); break;
+                        case 30: _xabort(30); break;
+                        case 31: _xabort(31); break;
+                        case 32: _xabort(32); break;
+                        case 33: _xabort(33); break;
+                        case 34: _xabort(34); break;
+                        case 35: _xabort(35); break;
+                        case 36: _xabort(36); break;
+                        case 37: _xabort(37); break;
+                        case 38: _xabort(38); break;
+                        case 39: _xabort(39); break;
+                      }
                     }
                   }
                   _xend();
                 }
-                if (ret == _XBEGIN_STARTED) {
-                  if(attempt_pop(t, pos->value) == EXTRACT) {
-                    last_pos = pos;
-                    last_i = i;
-                    return true;
+                if (ret == _XBEGIN_STARTED || ret == 0) {
+                  continue;
+                } else if(ret & _XABORT_EXPLICIT) {
+                  int code = _XABORT_CODE(ret);
+                  if (code == 0xff) {
+                    return false;
+                  } else {
+                    i = code;
+                    size_t idx = id + i;
+                    if (idx >= size) {
+                      idx -= size;
+                    }
+                    pos = std::next(first, idx);
+                    int code = attempt_pop(t, pos->value);
+                    ++pos;
+                    ++i;
+                    if(code == EXTRACT) {
+                      last_pos = pos;
+                      last_i = i;
+                      return true;
+                    }
                   }
-                  continue;
-                }
-                if (ret == 0) {
-                  continue;
-                }
-                if(ret & _XABORT_EXPLICIT) {
-                  return false;
-                }
-                if(ret & _XABORT_CONFLICT) {
+                } else if(ret & _XABORT_CONFLICT) {
                   if(status.value.load(std::memory_order_acquire) == EMPTY) {
                     return false;
                   }
