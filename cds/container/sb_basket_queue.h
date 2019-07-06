@@ -578,9 +578,6 @@ namespace cds { namespace container {
 
         static marked_ptr txn_test_and_set(atomic_marked_ptr& ptr, marked_ptr new_value) {
           int ret;
-          if(ptr.load(std::memory_order_relaxed) == new_value) {
-            return new_value;
-          }
           marked_ptr old_value;
           while(ptr.load(std::memory_order_relaxed) != new_value) {
             if((ret = _xbegin()) == _XBEGIN_STARTED) {
@@ -608,14 +605,32 @@ namespace cds { namespace container {
             return old_value;
         }
 
-        void free_chain(marked_ptr head, marked_ptr newHead, size_t id)
+        bool move_head(marked_ptr newHead) {
+            // "head" and "newHead" are guarded
+          int ret;
+          int new_id = newHead->m_basket_id;
+          marked_ptr oldHead;
+          while(true) {
+            if((ret = _xbegin()) == _XBEGIN_STARTED) {
+              oldHead = m_pHead.load(std::memory_order_relaxed);
+              if(oldHead->m_basket_id >= new_id) {
+                _xabort(0x1);
+              }
+              m_pHead.store(newHead, std::memory_order_relaxed);
+              _xend();
+              return true;
+            }
+            if(ret & _XABORT_EXPLICIT) {
+              return false;
+            }
+          }
+          return false;
+        }
+
+        void free_chain(size_t id)
         {
             auto& tstat = m_thread_stat[id + m_ids].value;
-            // "head" and "newHead" are guarded
-            if(!txn_cas(m_pHead, head, newHead)) {
-              return;
-            }
-            head = txn_test_and_set(m_pCapacity, marked_ptr(nullptr));
+            marked_ptr head = txn_test_and_set(m_pCapacity, marked_ptr(nullptr));
             if(!head.ptr()) {
               return;
             }
@@ -627,7 +642,7 @@ namespace cds { namespace container {
             });
             assert(min_id != -1);
             typename base_class::disposer disposer;
-            while(head->m_basket_id < min_id && head.ptr() != newHead.ptr()) {
+            while(head->m_basket_id < min_id) {
               auto tmp = head->m_pNext.load(std::memory_order_relaxed);
               assert(is_deleted(head));
               node_type* p = node_traits::to_value_ptr(head.ptr());
@@ -670,10 +685,9 @@ namespace cds { namespace container {
             marked_ptr iter(h);
             marked_ptr pNext = iter->m_pNext.load(std::memory_order_acquire);
 
+            size_t hops = 0;
+
             while (true) {
-
-                size_t hops = 0;
-
                 while (pNext.ptr() && is_deleted(iter)) {
                     iter = pNext;
                     pNext = pNext->m_pNext.load(std::memory_order_acquire);
@@ -681,8 +695,8 @@ namespace cds { namespace container {
                 }
 
                 if (pNext.ptr() == nullptr) {
-                    if (hops >= m_nMaxHops) {
-                      free_chain(h, iter, id);
+                    if (hops >= m_nMaxHops && move_head(iter)) {
+                      free_chain(id);
                     }
                     tstat.onEmptyDequeue();
                     release(id + m_ids);
@@ -695,25 +709,19 @@ namespace cds { namespace container {
                     release(id + m_ids);
                     return !value_node->m_bag.empty();
                 }
-                if (!is_deleted(iter)) {
-                  if (value_node->m_bag.extract(res.value, id)) {
-                      if (hops >= m_nMaxHops) {
-                        free_chain(h, iter, id);
-                      }
-                      //res.basket_id = value_node->m_basket_id;
-                      break;
-                  } else {
-                      tstat.onFalseExtract();
-                      // empty node, mark it as deleted.
-                      if (make_deleted(iter)) {
-                          free_chain(h, pNext, id);
-                      }
-                      iter = pNext;
-                      pNext = pNext->m_pNext.load(std::memory_order_acquire);
-                  }
+                if (value_node->m_bag.extract(res.value, id)) {
+                    if(hops >= m_nMaxHops && move_head(iter)) {
+                      free_chain(id);
+                    }
+                    //res.basket_id = value_node->m_basket_id;
+                    break;
                 } else {
-                  iter = pNext;
-                  pNext = pNext->m_pNext.load(std::memory_order_acquire);
+                    tstat.onFalseExtract();
+                    // empty node, mark it as deleted.
+                    make_deleted(iter);
+                    iter = pNext;
+                    pNext = pNext->m_pNext.load(std::memory_order_acquire);
+                    ++hops;
                 }
 
                 if (bDeque)
