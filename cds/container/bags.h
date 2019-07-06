@@ -274,7 +274,10 @@ namespace cds { namespace container {
                   _xend();
                 }
                 if (ret == _XBEGIN_STARTED) {
-                  if(attempt_pop(t, pos->value) == EXTRACT) {
+                  auto code = attempt_pop(t, pos->value);
+                  ++pos;
+                  ++i;
+                  if(code == EXTRACT) {
                     last_pos = pos;
                     last_i = i;
                     return true;
