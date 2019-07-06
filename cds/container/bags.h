@@ -160,7 +160,8 @@ namespace cds { namespace container {
             using value_type = PaddedValue<value>;
             static constexpr size_t MAX_THREADS=40;
             std::array<value_type, MAX_THREADS> m_bag;
-            TwicePaddedValue<std::atomic<int>> counter{0};
+            std::array<TwicePaddedValue<std::atomic<int>>, 2> counters;
+            std::array<TwicePaddedValue<std::atomic<int>>, 2> counters_status;
             TwicePaddedValue<std::atomic<int>> status{INSERT};
             const size_t m_size;
 
@@ -169,6 +170,8 @@ namespace cds { namespace container {
             IdBag(size_t ids) : m_size(ids)
             {
                 assert(m_size <= MAX_THREADS);
+                for(auto& c: counters) { c.value.store(0, std::memory_order_relaxed); }
+                for(auto& c: counters_status) { c.value.store(INSERT, std::memory_order_relaxed); }
             }
             static int attempt_pop(T& t, value& v) {
               // int flag = v.flag.load(std::memory_order_relaxed);
@@ -183,20 +186,36 @@ namespace cds { namespace container {
               }
               return flag;
             }
-            bool extract(T &t, size_t id) {
-              if(empty()) {
+            bool extract_from(T& t, size_t counter_index, const size_t size) {
+              if(counters_status[counter_index].value.load(std::memory_order_acquire) == EMPTY) {
                 return false;
               }
-              const size_t size = m_size;
               size_t index;
-              while((index = counter.value.fetch_add(1, std::memory_order_acquire)) < size) {
-                if(attempt_pop(t, m_bag[index].value) == EXTRACT) {
+              std::atomic<int>& counter = counters[counter_index].value;
+              size_t diff = (counter_index == 1) ? size : 0;
+              while((index = counter.fetch_add(1, std::memory_order_acquire)) < size) {
+                if(attempt_pop(t, m_bag[index + diff].value) == EXTRACT) {
                   return true;
                 }
               }
               if(index == size) {
-                status.value.store(EMPTY, std::memory_order_release);
+                counters_status[counter_index].value.store(EMPTY, std::memory_order_release);
               }
+              return false;
+            }
+            bool extract(T &t, size_t id) {
+              if(empty()) {
+                return false;
+              }
+              const size_t size = m_size >> 1;
+              id = (id >= size) ? 1 : 0;
+              if(extract_from(t, id, size)) {
+                return true;
+              }
+              if(extract_from(t, 1 - id, size)) {
+                return true;
+              }
+              status.value.store(EMPTY, std::memory_order_release);
               return false;
             }
             /*
