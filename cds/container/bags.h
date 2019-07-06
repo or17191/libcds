@@ -160,7 +160,7 @@ namespace cds { namespace container {
             using value_type = PaddedValue<value>;
             static constexpr size_t MAX_THREADS=40;
             std::array<value_type, MAX_THREADS> m_bag;
-            // TwicePaddedValue<std::atomic<int>> status{0};
+            TwicePaddedValue<std::atomic<int>> counter{0};
             TwicePaddedValue<std::atomic<int>> status{INSERT};
             const size_t m_size;
 
@@ -184,12 +184,18 @@ namespace cds { namespace container {
               return flag;
             }
             bool extract(T &t, size_t id) {
+              if(empty()) {
+                return false;
+              }
               const size_t size = m_size;
               size_t index;
-              while((index = status.value.fetch_add(1, std::memory_order_acquire)) < size) {
+              while((index = counter.value.fetch_add(1, std::memory_order_acquire)) < size) {
                 if(attempt_pop(t, m_bag[index].value) == EXTRACT) {
                   return true;
                 }
+              }
+              if(index == size) {
+                status.value.store(EMPTY, std::memory_order_relaxed);
               }
               return false;
             }
@@ -285,8 +291,7 @@ namespace cds { namespace container {
             }
             */
             bool empty() const {
-              return status.value.load(std::memory_order_acquire) >= m_size;
-              //return status.value.load(std::memory_order_acquire) == EMPTY;
+              return status.value.load(std::memory_order_acquire) == EMPTY;
             }
         };
 

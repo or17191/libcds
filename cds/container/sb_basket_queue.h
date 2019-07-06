@@ -389,20 +389,9 @@ namespace cds { namespace container {
         }
 
     private:
-        static bool is_deleted(marked_ptr p) {
+        static bool is_empty(marked_ptr p) {
           auto node_ptr = node_traits::to_value_ptr(p.ptr());
-          //return node_ptr->deleted.load(memory_model::memory_order_acquire);
           return node_ptr->m_bag.empty();
-        }
-        static bool make_deleted(marked_ptr p) {
-          //auto& deleted = node_traits::to_value_ptr(p.ptr())->deleted;
-          //deleted.store(true, std::memory_order_release);
-          return true;
-          //bool status = node_ptr->deleted.load(std::memory_order_relaxed);
-          //if(status != false) {
-          //  return false;
-          //}
-          //return node_ptr->deleted.compare_exchange_strong(status, true, memory_model::memory_order_release, memory_model::memory_order_relaxed);
         }
 
         marked_ptr protect(atomic_marked_ptr& p, size_t id) {
@@ -644,7 +633,7 @@ namespace cds { namespace container {
             typename base_class::disposer disposer;
             while(head->m_basket_id < min_id) {
               auto tmp = head->m_pNext.load(std::memory_order_relaxed);
-              assert(is_deleted(head));
+              assert(is_empty(head));
               node_type* p = node_traits::to_value_ptr(head.ptr());
               if(p != &m_Dummy) {
                 clear_links(p);
@@ -688,7 +677,7 @@ namespace cds { namespace container {
             size_t hops = 0;
 
             while (true) {
-                while (pNext.ptr() && is_deleted(iter)) {
+                while (pNext.ptr() && is_empty(iter)) {
                     iter = pNext;
                     pNext = pNext->m_pNext.load(std::memory_order_acquire);
                     ++hops;
@@ -717,8 +706,6 @@ namespace cds { namespace container {
                     break;
                 } else {
                     tstat.onFalseExtract();
-                    // empty node, mark it as deleted.
-                    make_deleted(iter);
                     iter = pNext;
                     pNext = pNext->m_pNext.load(std::memory_order_acquire);
                     ++hops;
