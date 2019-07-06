@@ -127,7 +127,7 @@ namespace cds { namespace container {
 
             struct node_type : public intrusive::basket_queue::node<gc>
             {
-                std::atomic<bool> deleted __attribute__((aligned(cds::c_nCacheLineSize))){false};
+                //std::atomic<bool> deleted __attribute__((aligned(cds::c_nCacheLineSize))){false};
                 bag_type m_bag __attribute__((aligned(cds::c_nCacheLineSize)));
 
                 node_type(size_t size)
@@ -213,13 +213,10 @@ namespace cds { namespace container {
         };
 
         //@cond
-        atomic_marked_ptr m_pHead{&m_Dummy}; ///< Queue's head pointer (aligned)
-        typename opt::details::apply_padding<atomic_marked_ptr, traits::padding>::padding_type pad1_;
-        atomic_marked_ptr m_pTail{&m_Dummy}; ///< Queue's tail pointer (aligned)
-        typename opt::details::apply_padding<atomic_marked_ptr, traits::padding>::padding_type pad2_;
-        atomic_marked_ptr m_pCapacity{&m_Dummy}; ///< Queue's tail pointer (aligned)
-        typename opt::details::apply_padding<atomic_marked_ptr, traits::padding>::padding_type pad4_;
-        node_type m_Dummy; ///< dummy node
+        atomic_marked_ptr m_pTail __attribute__((aligned(2 *cds::c_nCacheLineSize))) {&m_Dummy}; ///< Queue's tail pointer (aligned)
+        atomic_marked_ptr m_pHead __attribute__((aligned(2 *cds::c_nCacheLineSize))) {&m_Dummy}; ///< Queue's head pointer (aligned)
+        atomic_marked_ptr m_pCapacity __attribute__((aligned(2 *cds::c_nCacheLineSize))) {&m_Dummy}; ///< Queue's tail pointer (aligned)
+        node_type m_Dummy __attribute__((aligned(2 *cds::c_nCacheLineSize))); ///< dummy node
         typename opt::details::apply_padding<node_type, traits::padding>::padding_type pad3_;
         item_counter m_ItemCounter; ///< Item counter
         stat m_Stat;                ///< Internal statistics
