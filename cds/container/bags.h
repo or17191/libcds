@@ -195,10 +195,11 @@ namespace cds { namespace container {
                 }
               }
               if(index == size) {
-                status.value.store(EMPTY, std::memory_order_relaxed);
+                status.value.store(EMPTY, std::memory_order_release);
               }
               return false;
             }
+            /*
             template <class First>
             bool insert(T &t, size_t id, First)
             {
@@ -214,7 +215,7 @@ namespace cds { namespace container {
                   return false;
                 }
             }
-            /*
+            */
             template <class First>
             bool insert(T &t, const size_t id, First)
             {
@@ -233,15 +234,11 @@ namespace cds { namespace container {
                     return true;
                   } else if (ret & _XABORT_EXPLICIT) {
                     break;
-                  } else if (ret & _XABORT_CONFLICT) {
-                    auto flag = v.flag.load(std::memory_order_relaxed);
-                    if (flag != INSERT) {
-                      break;
-                    }
                   }
                 }
                 return false;
             }
+            /*
             bool extract(T &t, size_t id) {
               const size_t size = m_size;
               int current_status = status.value.load(std::memory_order_acquire);
