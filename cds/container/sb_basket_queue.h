@@ -178,7 +178,7 @@ namespace cds { namespace container {
     class SBBasketQueue
     {
         //@cond
-        typedef details::make_sb_basket_queue<GC, Bag<T>, Traits> maker;
+        typedef details::make_sb_basket_queue<GC, Bag<T*>, Traits> maker;
         typedef typename maker::type base_class;
         //@endcond
 
@@ -218,13 +218,6 @@ namespace cds { namespace container {
         typedef typename base_node_type::atomic_marked_ptr atomic_marked_ptr;
         //@endcond
 
-        struct dequeue_result
-        {
-            typename gc::template GuardArray<3> guards;
-            value_type value;
-            uuid_type basket_id;
-        };
-
         //@cond
         atomic_marked_ptr m_pTail __attribute__((aligned(2 *cds::c_nCacheLineSize))) {&m_Dummy}; ///< Queue's tail pointer (aligned)
         atomic_marked_ptr m_pHead __attribute__((aligned(2 *cds::c_nCacheLineSize))) {&m_Dummy}; ///< Queue's head pointer (aligned)
@@ -263,25 +256,28 @@ namespace cds { namespace container {
         {
             scoped_node_ptr node{nullptr};
             cds::uuid_type last_node{0};
-            char pad1_[cds::c_nCacheLineSize - sizeof(scoped_node_ptr) - sizeof(cds::uuid_type)];
+            stat stats;
         } __attribute__((aligned (cds::c_nCacheLineSize)));
         std::unique_ptr<thread_data[]> m_nodes_cache;
-        struct padded_stat {
-          stat value;
-        } __attribute__((aligned (cds::c_nCacheLineSize)));
-        std::vector<padded_stat> m_thread_stat;
         struct hazard_node {
           std::atomic<int> value{-1};
         } __attribute__((aligned (cds::c_nCacheLineSize)));
         std::vector<hazard_node> m_thread_hazard;
         bool stat_copied = false;
 
+        struct dequeue_result
+        {
+            typename gc::template GuardArray<3> guards;
+            T* value;
+            uuid_type basket_id;
+        };
+
+
     public:
         /// Initializes empty queue
         SBBasketQueue(size_t ids)
             : m_Dummy(ids), m_ids(ids),
-              m_nodes_cache(new thread_data[m_ids]()),
-              m_thread_stat(ids * 2),
+              m_nodes_cache(new thread_data[2 * m_ids]()),
               m_thread_hazard(ids * 2)
         {
           // m_Dummy.m_basket_id = static_cast<cds::uuid_type>(-1);
@@ -322,11 +318,10 @@ namespace cds { namespace container {
             and then it calls \p intrusive::BasketQueue::enqueue().
             Returns \p true if success, \p false otherwise.
         */
-        template <class Arg>
-        bool enqueue(Arg &&val, const size_t id)
+        bool enqueue(T* val, const size_t id)
         {
-            auto &p = m_nodes_cache[id];
-            if (do_enqueue(p, std::forward<Arg>(val), id)) {
+            auto &tcache = m_nodes_cache[id];
+            if (do_enqueue(tcache, val, id)) {
                 return true;
             }
             return false;
@@ -344,7 +339,7 @@ namespace cds { namespace container {
             dequeued value. The assignment operator for \p value_type is invoked.
             If queue is empty, the function returns \p false, \p dest is unchanged.
         */
-        bool dequeue(value_type &dest, const size_t tid, uuid_type *basket_id = nullptr)
+        bool dequeue(T* dest, const size_t tid, uuid_type *basket_id = nullptr)
         {
 
             dequeue_result res;
@@ -352,7 +347,7 @@ namespace cds { namespace container {
                 // TSan finds a race between this read of \p src and node_type constructor
                 // I think, it is wrong
                 CDS_TSAN_ANNOTATE_IGNORE_READS_BEGIN;
-                dest = std::move(res.value);
+                dest = res.value;
                 if (basket_id != nullptr) {
                     *basket_id = res.basket_id;
                 }
@@ -394,8 +389,8 @@ namespace cds { namespace container {
         {
             if(!stat_copied) {
               stat_copied = true;
-              for(auto& e: m_thread_stat) {
-                m_Stat += e.value;
+              for(size_t i = 0; i < m_ids * 2; ++i) {
+                m_Stat += m_nodes_cache[i].stats;
               }
             }
             return m_Stat;
@@ -445,12 +440,10 @@ namespace cds { namespace container {
           return assign(v, id);
         }
 
-        template <class Arg>
-        bool do_enqueue(thread_data &th, Arg &&tmp_val, const size_t id)
+        bool do_enqueue(thread_data &th, T* val, const size_t id)
         {
-            auto& tstat = m_thread_stat[id].value;
+            auto& tstat = m_nodes_cache[id].stats;
             auto& node_ptr = th.node;
-            value_type val(std::forward<Arg>(tmp_val));
             base_node_type* pNew{nullptr};
 
             back_off bkoff;
@@ -607,7 +600,7 @@ namespace cds { namespace container {
 
         void free_chain(size_t id)
         {
-            auto& tstat = m_thread_stat[id + m_ids].value;
+            auto& tstat = m_nodes_cache[id + m_ids].stats;
             marked_ptr head = txn_test_and_set(m_pCapacity, marked_ptr(nullptr));
             if(!head.ptr()) {
               return;
@@ -655,7 +648,7 @@ namespace cds { namespace container {
         {
             // Note:
             // If bDeque == false then the function is called from empty method and no real dequeuing operation is performed
-            auto& tstat = m_thread_stat[id + m_ids].value;
+            auto& tstat = m_nodes_cache[id + m_ids].stats;
 
             back_off bkoff;
 
@@ -688,7 +681,9 @@ namespace cds { namespace container {
                     release(id + m_ids);
                     return !value_node->m_bag.empty();
                 }
-                if (value_node->m_bag.extract(res.value, id)) {
+                T* ptr{nullptr};
+                if (value_node->m_bag.extract(ptr, id)) {
+                    res.value.reset(ptr);
                     if(hops >= m_nMaxHops && advance_node(m_pHead, iter)) {
                       free_chain(id);
                     }
