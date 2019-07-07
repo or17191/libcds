@@ -254,9 +254,9 @@ namespace {
     using value_type = std::pair<intmax_t, intmax_t>;
     using gc_type = cds::gc::HP;
 
-    using SBSimpleBasketQueue_HP = cds::container::SBBasketQueue<gc_type, value_type, SimpleBag>;
+    //using SBSimpleBasketQueue_HP = cds::container::SBBasketQueue<gc_type, value_type, SimpleBag>;
     using SBIdBasketQueue_HP = cds::container::SBBasketQueue<gc_type, value_type, IdBag>;
-    using SBStackBasketQueue_HP = cds::container::SBBasketQueue<gc_type, value_type, StackBag>;
+    //using SBStackBasketQueue_HP = cds::container::SBBasketQueue<gc_type, value_type, StackBag>;
 
     struct htm_traits : cds::container::sb_basket_queue::traits {
       typedef cds::intrusive::htm_basket_queue::htm_insert<> insert_policy;
@@ -275,26 +275,26 @@ namespace {
         typedef cds::container::sb_basket_queue::stat<> stat;
     };
 
-    using HTMSBSimpleBasketQueue_HP = cds::container::SBBasketQueue<gc_type, value_type, SimpleBag, htm_traits>;
+    //using HTMSBSimpleBasketQueue_HP = cds::container::SBBasketQueue<gc_type, value_type, SimpleBag, htm_traits>;
     using HTMSBIdBasketQueue_HP = cds::container::SBBasketQueue<gc_type, value_type, IdBag, htm_id_traits>;
     using HTMSBIdBasketQueue_HP_Stat = cds::container::SBBasketQueue<gc_type, value_type, IdBag, htm_id_stat_traits>;
-    using HTMSBStackBasketQueue_HP = cds::container::SBBasketQueue<gc_type, value_type, StackBag, htm_traits>;
+    //using HTMSBStackBasketQueue_HP = cds::container::SBBasketQueue<gc_type, value_type, StackBag, htm_traits>;
 
-    static_assert(std::is_same<HTMSBSimpleBasketQueue_HP::insert_policy, htm_traits::insert_policy>::value, "Use htm");
+    //static_assert(std::is_same<HTMSBSimpleBasketQueue_HP::insert_policy, htm_traits::insert_policy>::value, "Use htm");
 
     using SBIdBasketQueue_HP_Stat = cds::container::SBBasketQueue<gc_type, value_type, IdBag, stat_traits>;
 
-    CDSSTRESS_QUEUE_F( SBSimpleBasketQueue_HP)
+   // CDSSTRESS_QUEUE_F( SBSimpleBasketQueue_HP)
     CDSSTRESS_QUEUE_F( SBIdBasketQueue_HP)
-    CDSSTRESS_QUEUE_F( SBStackBasketQueue_HP)
+    //CDSSTRESS_QUEUE_F( SBStackBasketQueue_HP)
 
     CDSSTRESS_QUEUE_F( SBIdBasketQueue_HP_Stat)
 
 #ifdef CDS_HTM_SUPPORT
-    CDSSTRESS_QUEUE_F( HTMSBSimpleBasketQueue_HP)
+    //CDSSTRESS_QUEUE_F( HTMSBSimpleBasketQueue_HP)
     CDSSTRESS_QUEUE_F( HTMSBIdBasketQueue_HP)
     CDSSTRESS_QUEUE_F( HTMSBIdBasketQueue_HP_Stat)
-    CDSSTRESS_QUEUE_F( HTMSBStackBasketQueue_HP)
+    //CDSSTRESS_QUEUE_F( HTMSBStackBasketQueue_HP)
 #endif // CDS_HTM_SUPPORT
 
 #undef CDSSTRESS_QUEUE_F

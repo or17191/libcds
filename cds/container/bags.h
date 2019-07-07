@@ -41,6 +41,7 @@ namespace cds { namespace container {
             explicit TwicePaddedValue(Args&&... args) : value(std::forward<Args>(args)...) {}
         } __attribute__((aligned (2 * cds::c_nCacheLineSize)));
 
+        /*
         template <class T>
         class SimpleBag
         {
@@ -67,7 +68,7 @@ namespace cds { namespace container {
               assert(m_size <= MAX_THREADS);
             }
 
-            void reset(T& t, size_t /*id*/) {
+            void reset(T& t, size_t ) {
               assert(m_pushes.load(atomics::memory_order_relaxed) == 1);
               assert(m_pops.load(atomics::memory_order_relaxed) == 0);
               assert(m_real_size.load(atomics::memory_order_relaxed) == NO_SIZE);
@@ -79,7 +80,7 @@ namespace cds { namespace container {
             }
 
             template <class First>
-            bool insert(T &t, size_t /*id*/, First)
+            bool insert(T &t, size_t , First)
             {
                 auto idx = m_pushes.fetch_add(1, atomics::memory_order_acq_rel);
                 assert(idx < m_size);
@@ -102,7 +103,7 @@ namespace cds { namespace container {
                 cell.flag.store(true, atomics::memory_order_release);
                 return true;
             }
-            bool extract(T &t, size_t /*id*/)
+            bool extract(T &t, size_t )
             {
                 auto idx = m_pops.fetch_add(1, atomics::memory_order_acq_rel);
                 int real_size;
@@ -136,14 +137,14 @@ namespace cds { namespace container {
                 return pops >= real_size;
               }
             }
-            /*
             size_t size() const
             {
                 auto size_ = m_counter.load(atomics::memory_order_acquire);
                 assert(size_ >= 0);
                 return size_;
-            }*/
+            }
         };
+        */
         static constexpr int INSERT = 0;
         static constexpr int EXTRACT = 1;
         static constexpr int EMPTY = 2;
@@ -289,6 +290,7 @@ namespace cds { namespace container {
             }
         };
 
+        /*
         template <class T>
         class ModIdBag
         {
@@ -380,7 +382,9 @@ namespace cds { namespace container {
               return status.value.load(std::memory_order_acquire) == EMPTY;
             }
         };
+        */
 
+        /*
         template <class T>
         class StackBag
         {
@@ -393,20 +397,20 @@ namespace cds { namespace container {
             bag_type m_bag;
 
         public:
-            StackBag(size_t /*ids*/) {}
+            StackBag(size_t ) {}
             static constexpr const size_t c_nHazardPtrCount = bag_type::c_nHazardPtrCount; ///< Count of hazard pointer required for the algorithm
 
             template <class First>
-            bool insert(T &t, size_t /*id*/, First)
+            bool insert(T &t, size_t , First)
             {
                 return m_bag.push(std::move(t));
             }
-            bool extract(T &t, size_t /*id*/)
+            bool extract(T &t, size_t )
             {
                 return m_bag.pop(t);
             }
 
-            void reset(T &t, size_t /*id*/)
+            void reset(T &t, size_t )
             {
                 auto res = m_bag.pop(t);
                 (void)res;
@@ -422,6 +426,7 @@ namespace cds { namespace container {
                 return m_bag.size();
             }
         };
+        */
 
     } // namespace bags
 }}    // namespace cds::container

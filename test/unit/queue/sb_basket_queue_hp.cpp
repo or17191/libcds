@@ -149,7 +149,7 @@ namespace {
         }
 
         template <class T>
-        using bag_t = cds::container::bags::SimpleBag<T>;
+        using bag_t = cds::container::bags::IdBag<T>;
 
         void SetUp()
         {
