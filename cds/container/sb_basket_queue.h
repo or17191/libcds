@@ -442,7 +442,7 @@ namespace cds { namespace container {
 
             back_off bkoff;
 
-            protect(m_pTail, id);
+            marked_ptr t = protect(m_pTail, id);
 
             while (true) {
                 if(!node_ptr) {
@@ -457,8 +457,6 @@ namespace cds { namespace container {
                   pNew = node_traits::to_node_ptr(node_ptr.get());
                   link_checker::is_empty(pNew);
                 }
-
-                const marked_ptr t = m_pTail.load(std::memory_order_acquire);
 
                 marked_ptr pNext{};
                 pNew->m_basket_id = t->m_basket_id + 1;
@@ -479,8 +477,6 @@ namespace cds { namespace container {
                     if (cds_likely(node->m_bag.insert(val, id, std::true_type{}))) {
                         th.last_node = node->m_basket_id;
                         break;
-                    } else {
-                        continue;
                     }
                 } else if ( res == insert_policy::InsertResult::FAILED_INSERT ) {
                     // Try adding to basket
@@ -498,34 +494,15 @@ namespace cds { namespace container {
                         tstat.onAddBasket();
                         // th.last_node = node->m_basket_id;
                         break;
-                    } else {
-                        continue;
                     }
-                } else {
-                    // Tail is misplaced, advance it
-                    if (m_pTail.load(memory_model::memory_order_acquire) != t) {
-                        tstat.onEnqueueRace();
-                        bkoff();
-                        continue;
-                    }
-                    pNext = t;
+                }
 
-                    marked_ptr p;
-                    bool bTailOk = true;
-                    while ((p = pNext->m_pNext.load(memory_model::memory_order_acquire)).ptr() != nullptr) {
-                        bTailOk = m_pTail.load(memory_model::memory_order_relaxed) == t;
-                        if (!bTailOk)
-                            break;
-
-                        if (pNext->m_pNext.load(memory_model::memory_order_relaxed) != p)
-                            continue;
-                        pNext = p;
-                    }
-                    auto copy_t = t;
-                    if (!bTailOk || !m_pTail.compare_exchange_weak(copy_t, marked_ptr(pNext.ptr()), memory_model::memory_order_release, atomics::memory_order_relaxed))
-                        tstat.onAdvanceTailFailed();
-
-                    tstat.onBadTail();
+                {
+                  marked_ptr pNext;
+                  while((pNext = t->m_pNext.load(std::memory_order_acquire)).ptr() != nullptr) {
+                    t = pNext;
+                  }
+                  advance_node(m_pTail, t);
                 }
 
                 tstat.onEnqueueRace();
