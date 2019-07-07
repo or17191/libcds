@@ -477,7 +477,7 @@ namespace cds { namespace container {
 
                 if ( res == insert_policy::InsertResult::SUCCESSFUL_INSERT) {
                     node_ptr.release();
-                    auto node = node_traits::to_value_ptr(t.ptr());
+                    auto node = node_traits::to_value_ptr(pNew);
                     auto copy_t = t;
                     if (!m_pTail.compare_exchange_strong(copy_t, marked_ptr(pNew), memory_model::memory_order_release, atomics::memory_order_relaxed))
                         tstat.onAdvanceTailFailed();
@@ -497,7 +497,7 @@ namespace cds { namespace container {
 
                     // add to the basket
                     bkoff();
-                    auto node = node_traits::to_value_ptr(t.ptr());
+                    auto node = node_traits::to_value_ptr(pNext.ptr());
                     // if(cds_unlikely(th.last_node == node->m_basket_id)) {
                     //   std::stringstream s;
                     //   s << "Other bag " << std::hex << th.last_node << ' ' << node->m_basket_id << ' ' << id;
@@ -672,7 +672,7 @@ namespace cds { namespace container {
                     ++hops;
                 }
 
-                if (pNext.ptr() == nullptr) {
+                if(pNext.ptr() == nullptr && is_empty(iter)) {
                     if (hops >= m_nMaxHops && advance_node(m_pHead, iter)) {
                       free_chain(id);
                     }
@@ -680,6 +680,7 @@ namespace cds { namespace container {
                     release(id + m_ids);
                     return false;
                 }
+
                 auto value_node = node_traits::to_value_ptr(*iter.ptr());
                 if(!bDeque) {
                     // Not sure how thread safe that is
@@ -694,9 +695,20 @@ namespace cds { namespace container {
                     //res.basket_id = value_node->m_basket_id;
                     break;
                 } else {
+                    if(pNext.ptr() == nullptr) {
+                      pNext = iter->m_pNext.load(std::memory_order_acquire);
+                    }
+                    if(pNext.ptr() == nullptr) {
+                      if (hops >= m_nMaxHops && advance_node(m_pHead, iter)) {
+                        free_chain(id);
+                      }
+                      tstat.onEmptyDequeue();
+                      release(id + m_ids);
+                      return false;
+                    }
                     tstat.onFalseExtract();
                     iter = pNext;
-                    pNext = pNext->m_pNext.load(std::memory_order_acquire);
+                    pNext = iter->m_pNext.load(std::memory_order_acquire);
                     ++hops;
                 }
 

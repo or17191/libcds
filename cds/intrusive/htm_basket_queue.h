@@ -51,6 +51,7 @@ namespace cds { namespace intrusive {
             }
             if ((ret & _XABORT_EXPLICIT) != 0) {
               assert(_XABORT_CODE(ret) == 0x01);
+              new_value = old.load(std::memory_order_acquire);
               return InsertResult::FAILED_INSERT;
             }
             if (ret == 0) {
@@ -60,10 +61,6 @@ namespace cds { namespace intrusive {
             const bool is_conflict = (ret & _XABORT_CONFLICT) != 0;
             const bool is_nested = (ret & _XABORT_NESTED) != 0;
             if (is_conflict && is_nested) {
-              if (!CheckNext::value) {
-                new_value = nullptr;
-                return InsertResult::FAILED_INSERT;
-              }
               delay(FINAL_LATENCY);
               for(size_t p = 0; p < PATIENCE; ++ p) {
                 auto value = old.load(std::memory_order_acquire);
