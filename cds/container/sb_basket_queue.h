@@ -594,18 +594,17 @@ namespace cds { namespace container {
             return old_value;
         }
 
-        bool move_head(marked_ptr newHead) {
-            // "head" and "newHead" are guarded
+        bool advance_node(atomic_marked_ptr& ptr, marked_ptr newValue) {
           int ret;
-          int new_id = newHead->m_basket_id;
-          marked_ptr oldHead;
+          int new_id = newValue->m_basket_id;
+          marked_ptr oldValue;
           while(true) {
             if((ret = _xbegin()) == _XBEGIN_STARTED) {
-              oldHead = m_pHead.load(std::memory_order_relaxed);
-              if(oldHead->m_basket_id >= new_id) {
+              oldValue = ptr.load(std::memory_order_relaxed);
+              if(oldValue->m_basket_id >= new_id) {
                 _xabort(0x1);
               }
-              m_pHead.store(newHead, std::memory_order_relaxed);
+              ptr.store(newValue, std::memory_order_relaxed);
               _xend();
               return true;
             }
@@ -684,7 +683,7 @@ namespace cds { namespace container {
                 }
 
                 if (pNext.ptr() == nullptr) {
-                    if (hops >= m_nMaxHops && move_head(iter)) {
+                    if (hops >= m_nMaxHops && advance_node(m_pHead, iter)) {
                       free_chain(id);
                     }
                     tstat.onEmptyDequeue();
@@ -699,7 +698,7 @@ namespace cds { namespace container {
                     return !value_node->m_bag.empty();
                 }
                 if (value_node->m_bag.extract(res.value, id)) {
-                    if(hops >= m_nMaxHops && move_head(iter)) {
+                    if(hops >= m_nMaxHops && advance_node(m_pHead, iter)) {
                       free_chain(id);
                     }
                     //res.basket_id = value_node->m_basket_id;
