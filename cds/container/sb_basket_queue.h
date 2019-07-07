@@ -19,10 +19,23 @@ namespace cds { namespace container {
     /** @ingroup cds_nonintrusive_helper
     */
     namespace sb_basket_queue {
-        template <typename Counter = cds::atomicity::event_counter >
-        struct stat : public intrusive::basket_queue::stat<Counter>
+        class non_atomic_counter {
+          public:
+            non_atomic_counter() = default;
+            void reset() { m_inner = 0; }
+            size_t get() const { return m_inner; }
+            non_atomic_counter& operator++() { ++m_inner; return *this; }
+            non_atomic_counter& operator+=(size_t other) {
+              m_inner += other;
+              return *this;
+            }
+          private:
+            size_t m_inner{0};
+        };
+        template <typename Counter = non_atomic_counter >
+        struct stat : public intrusive::basket_queue::stat<non_atomic_counter>
         {
-            using base_type = intrusive::basket_queue::stat<Counter>;
+            using base_type = intrusive::basket_queue::stat<non_atomic_counter>;
             typename base_type::counter_type m_FalseExtract;    ///< Count the number of times an extract failed
             typename base_type::counter_type m_FreeNode;    ///< Count the number of times an extract failed
 
