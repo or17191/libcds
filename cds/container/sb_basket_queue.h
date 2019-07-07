@@ -339,7 +339,7 @@ namespace cds { namespace container {
             dequeued value. The assignment operator for \p value_type is invoked.
             If queue is empty, the function returns \p false, \p dest is unchanged.
         */
-        bool dequeue(T* dest, const size_t tid, uuid_type *basket_id = nullptr)
+        bool dequeue(T* &dest, const size_t tid, uuid_type *basket_id = nullptr)
         {
 
             dequeue_result res;
@@ -681,9 +681,7 @@ namespace cds { namespace container {
                     release(id + m_ids);
                     return !value_node->m_bag.empty();
                 }
-                T* ptr{nullptr};
-                if (value_node->m_bag.extract(ptr, id)) {
-                    res.value.reset(ptr);
+                if (value_node->m_bag.extract(res.value, id)) {
                     if(hops >= m_nMaxHops && advance_node(m_pHead, iter)) {
                       free_chain(id);
                     }

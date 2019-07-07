@@ -752,7 +752,7 @@ namespace cds { namespace container {
           using item_counter = typename Traits::item_counter;
           using gc = cds::gc::nogc;
           WFQueue(size_t ids)
-              : m_size(ids), m_handlers(ids), m_deffered_free(ids)
+              : m_size(ids), m_handlers(ids)
           {
             queue_init(&m_internal_queue, m_size);
             for(size_t i = 0; i < m_size; ++i) {
@@ -772,7 +772,6 @@ namespace cds { namespace container {
               return m_internal_queue.stat;
           }
 
-          template <class Arg>
           bool enqueue(T* val, size_t id)
           {
               enqueue(&m_internal_queue, &m_handlers[id], val);
@@ -790,7 +789,7 @@ namespace cds { namespace container {
           }
 
           void clear(size_t id) {
-            T dest;
+            T* dest;
             while(dequeue(dest, id)) {}
           }
 

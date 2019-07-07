@@ -3,6 +3,8 @@
 // Distributed under the Boost Software License, Version 1.0. (See accompanying
 // file LICENSE or copy at http://www.boost.org/LICENSE_1_0.txt)
 
+#include <numeric>
+
 
 #include <cds_test/check_size.h>
 
@@ -20,26 +22,28 @@ namespace {
         template <typename Queue>
         void test( Queue& q )
         {
-            typedef typename Queue::value_type value_type;
-            value_type it;
-
             const size_t nSize = 100;
+            typedef typename Queue::value_type value_type;
+            std::vector<value_type> vec(nSize);
+            std::iota(vec.begin(), vec.end(), 0);
+            value_type* it;
+
 
             ASSERT_TRUE( !q.pop(it, 0) );
             ASSERT_CONTAINER_SIZE( q, 0 );
 
             // enqueue/dequeue
             for ( size_t i = 0; i < nSize; ++i ) {
-                it = static_cast<value_type>(i);
-                ASSERT_TRUE( q.enqueue( it, 0 ));
+                ASSERT_TRUE( q.enqueue( &vec[i], 0 ));
                 ASSERT_CONTAINER_SIZE( q, i + 1 );
             }
             ASSERT_CONTAINER_SIZE( q, nSize );
 
             for ( size_t i = 0; i < nSize; ++i ) {
-                it = -1;
+                it = nullptr;
                 ASSERT_TRUE( q.dequeue( it, 0 ));
-                ASSERT_EQ( it, static_cast<value_type>( i ));
+                ASSERT_NE( it, nullptr);
+                ASSERT_EQ( *it, static_cast<value_type>( i ));
                 ASSERT_CONTAINER_SIZE( q, nSize - i - 1 );
             }
             ASSERT_TRUE( !q.pop(it, 0) );
@@ -47,16 +51,16 @@ namespace {
 
             // push/pop
             for ( size_t i = 0; i < nSize; ++i ) {
-                it = static_cast<value_type>(i);
-                ASSERT_TRUE( q.push( it, 0 ));
+                ASSERT_TRUE( q.push( &vec[i], 0 ));
                 ASSERT_CONTAINER_SIZE( q, i + 1 );
             }
             ASSERT_CONTAINER_SIZE( q, nSize );
 
             for ( size_t i = 0; i < nSize; ++i ) {
-                it = -1;
+                it = nullptr;
                 ASSERT_TRUE( q.pop( it , 0));
-                ASSERT_EQ( it, static_cast<value_type>( i ));
+                ASSERT_NE( it, nullptr);
+                ASSERT_EQ( *it, static_cast<value_type>( i ));
                 ASSERT_CONTAINER_SIZE( q, nSize - i - 1 );
             }
             ASSERT_TRUE( !q.pop(it, 0) );
@@ -64,7 +68,7 @@ namespace {
 
             // clear
             for ( size_t i = 0; i < nSize; ++i ) {
-                ASSERT_TRUE( q.push( static_cast<value_type>(i), 0));
+                ASSERT_TRUE( q.push( &vec[i], 0));
             }
             ASSERT_CONTAINER_SIZE( q, nSize );
 
@@ -73,61 +77,6 @@ namespace {
             ASSERT_CONTAINER_SIZE( q, 0 );
 
             // pop from empty queue
-        }
-
-        template <class Queue>
-        void test_string( Queue& q )
-        {
-            std::string it;
-            std::string str[3];
-            str[0] = "one";
-            str[1] = "two";
-            str[2] = "three";
-            const size_t nSize = sizeof( str ) / sizeof( str[0] );
-
-            for ( size_t i = 0; i < nSize; ++i ) {
-                ASSERT_TRUE( q.push( str[i].c_str(), 0));
-                ASSERT_CONTAINER_SIZE( q, i + 1 );
-            }
-            ASSERT_CONTAINER_SIZE( q, nSize );
-
-            {
-                std::string s;
-                for ( size_t i = 0; i < nSize; ++i ) {
-                    if ( i & 1 )
-                        ASSERT_TRUE( q.pop( s, 0 ));
-                    else
-                        ASSERT_TRUE( q.dequeue( s, 0 ));
-
-                    ASSERT_CONTAINER_SIZE( q, nSize - i - 1 );
-                    ASSERT_EQ( s, str[i] );
-                }
-            }
-            ASSERT_TRUE( !q.pop(it, 0) );
-            ASSERT_CONTAINER_SIZE( q, 0 );
-
-
-            // move push
-            for ( size_t i = 0; i < nSize; ++i ) {
-                std::string s = str[i];
-                ASSERT_FALSE( s.empty());
-                if ( i & 1 )
-                    ASSERT_TRUE( q.enqueue( std::move( s ), 0));
-                else
-                    ASSERT_TRUE( q.push( std::move( s ), 0));
-                ASSERT_TRUE( s.empty());
-                ASSERT_CONTAINER_SIZE( q, i + 1 );
-            }
-            ASSERT_CONTAINER_SIZE( q, nSize );
-
-            for ( size_t i = 0; i < nSize; ++i ) {
-                std::string s;
-                ASSERT_TRUE( q.pop( s, 0 ));
-                ASSERT_CONTAINER_SIZE( q, nSize - i - 1 );
-                ASSERT_EQ( s, str[i] );
-            }
-            ASSERT_TRUE( !q.pop(it, 0) );
-            ASSERT_CONTAINER_SIZE( q, 0 );
         }
 
         void SetUp()
@@ -152,15 +101,5 @@ namespace {
         test_queue q(1);
         test(q);
     }
-
-
-    TEST_F( WFQueue_HP, move )
-    {
-        typedef cds::container::WFQueue<std::string> test_queue;
-
-        test_queue q(1);
-        test_string( q );
-    }
-
 } // namespace
 
