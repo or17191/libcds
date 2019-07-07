@@ -215,8 +215,8 @@ namespace {
         };
 
     protected:
-        size_t m_nThreadPushCount;
-        size_t m_nThreadPreStoreSize;
+        static size_t s_nThreadPushCount;
+        static size_t s_nThreadPreStoreSize;
 
     protected:
         template <class It>
@@ -292,7 +292,7 @@ namespace {
             // Test consistency of popped sequence
             for ( size_t nWriter = 0; nWriter < s_nProducerThreadCount; ++nWriter ) {
                 std::vector<size_t> arrData;
-                arrData.reserve( m_nThreadPushCount );
+                arrData.reserve( s_nThreadPushCount );
                 for ( size_t nReader = 0; nReader < arrConsumer.size(); ++nReader ) {
                     auto it = arrConsumer[nReader]->m_WriterData[nWriter].begin();
                     auto itEnd = arrConsumer[nReader]->m_WriterData[nWriter].end();
@@ -316,7 +316,7 @@ namespace {
                 }
 
                 EXPECT_EQ( arrData[0], 0u ) << "producer=" << nWriter;
-                EXPECT_EQ( arrData[arrData.size() - 1], m_nThreadPushCount - 1 ) << "producer=" << nWriter;
+                EXPECT_EQ( arrData[arrData.size() - 1], s_nThreadPushCount - 1 ) << "producer=" << nWriter;
             }
 
             check_baskets(baskets.begin(), baskets.end(), HasBaskets{});
@@ -352,30 +352,24 @@ namespace {
             typedef Consumer<Queue, HasBaskets> consumer_type;
             typedef Producer<Queue> producer_type;
 
-            m_nThreadPushCount = s_nQueueSize / s_nProducerThreadCount;
-            s_nQueueSize = m_nThreadPushCount * s_nProducerThreadCount;
-
-            m_nThreadPreStoreSize = s_nPreStoreSize / s_nProducerThreadCount;
-            s_nPreStoreSize = m_nThreadPreStoreSize * s_nProducerThreadCount;
-
             cds_test::thread_pool& pool = get_pool();
 
             if (sequential_pre_store) {
               std::cout << "[ STAT     ] Sequential pre store" << std::endl;
               for(size_t i = 0; i < s_nProducerThreadCount; ++i) {
-                size_t failed = push_many(q, 0, m_nThreadPreStoreSize, i, values);
+                size_t failed = push_many(q, 0, s_nThreadPreStoreSize, i, values);
                 EXPECT_EQ(0, failed);
-                values += m_nThreadPreStoreSize;
+                values += s_nThreadPreStoreSize;
               }
             } else {
               std::cout << "[ STAT     ] Parallel pre store" << std::endl;
-              pool.add( new producer_type( pool, q, 0 , m_nThreadPreStoreSize), s_nProducerThreadCount );
+              pool.add( new producer_type( pool, q, 0 , s_nThreadPreStoreSize), s_nProducerThreadCount );
               setup_pool_ids<producer_type, consumer_type>(pool, independent_ids, values);
               pool.run();
               pool.reset();
             }
-            pool.add( new producer_type( pool, q, m_nThreadPreStoreSize, m_nThreadPushCount), s_nProducerThreadCount );
-            pool.add( new consumer_type( pool, q, m_nThreadPushCount ), s_nConsumerThreadCount );
+            pool.add( new producer_type( pool, q, s_nThreadPreStoreSize, s_nThreadPushCount), s_nProducerThreadCount );
+            pool.add( new consumer_type( pool, q, s_nThreadPushCount ), s_nConsumerThreadCount );
             setup_pool_ids<producer_type, consumer_type>(pool, independent_ids, values);
             s_nPreStoreDone = true;
             s_nProducerDone.store( 0 );
@@ -463,6 +457,13 @@ namespace {
             if ( s_nHeavyValueSize == 0 )
                 s_nHeavyValueSize = 1;
 
+            s_nThreadPushCount = s_nQueueSize / s_nProducerThreadCount;
+            s_nQueueSize = s_nThreadPushCount * s_nProducerThreadCount;
+
+            s_nThreadPreStoreSize = s_nPreStoreSize / s_nProducerThreadCount;
+            s_nPreStoreSize = s_nThreadPreStoreSize * s_nProducerThreadCount;
+
+
             std::cout << "[ STAT     ] Producer = " << s_nProducerThreadCount << std::endl;
             std::cout << "[ STAT     ] Consumer = " << s_nConsumerThreadCount << std::endl;
             std::cout << "[ STAT     ] QueueSize = " << s_nQueueSize << std::endl;
@@ -477,6 +478,10 @@ namespace {
 
         //static void TearDownTestCase();
     };
+    template<class Queue>
+    size_t sb_queue_push_pop<Queue>::s_nThreadPushCount;
+    template<class Queue>
+    size_t sb_queue_push_pop<Queue>::s_nThreadPreStoreSize;
 
     using simple_sb_queue_push_pop = sb_queue_push_pop<>;
 

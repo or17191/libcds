@@ -32,16 +32,13 @@ namespace {
     };
 
     template <class Queue>
-    size_t push_many(Queue& queue, const size_t first, const size_t last, const size_t producer) {
+    size_t push_many(Queue& queue, const size_t first, const size_t last, const size_t producer, typename Queue::value_type* values) {
       size_t failed = 0;
-      old_value v;
-      v.nNo = first;
-      v.nWriterNo = producer;
-      while(v.nNo < last) {
-        if ( queue.push( v, producer )) {
-            ++v.nNo;
-        } else {
-            ++failed;
+      for(size_t i = first; i < last; ++i, ++values) {
+        values->nNo = i;
+        values->nWriterNo = producer;
+        while(!queue.push(values, producer)) {
+          ++failed;
         }
       }
       return failed;
@@ -89,7 +86,7 @@ namespace {
             {
                 size_t const nPushCount = m_nPushCount;
                 s_Topology->pin_thread(id());
-                push_many(m_Queue, 0, m_nPushCount, id());
+                push_many(m_Queue, 0, m_nPushCount, id(), values);
                 s_Topology->verify_pin(id());
             }
 
@@ -97,6 +94,7 @@ namespace {
             Queue&              m_Queue;
             size_t const        m_nPushCount;
             size_t              m_nWriterId;
+            typename Queue::value_type* values;
         };
 
         template <class Queue>
@@ -162,14 +160,14 @@ namespace {
                 m_nPopped = 0;
                 m_nBadWriter = 0;
                 const size_t nTotalWriters = s_nThreadCount;
-                value_type v;
+                value_type* v;
                 bool writers_done = false;
                 auto start = clock_type::now();
                 while ( true ) {
                     if (m_Queue.pop(v, m_nReaderId)) {
                         ++m_nPopped;
-                        if ( v.nWriterNo < nTotalWriters )
-                            m_WriterData[ v.nWriterNo ].emplace_back( v.nNo );
+                        if ( v->nWriterNo < nTotalWriters )
+                            m_WriterData[ v->nWriterNo ].emplace_back( v->nNo );
                         else
                             ++m_nBadWriter;
                     }
@@ -185,8 +183,8 @@ namespace {
         };
 
     protected:
-        size_t m_nThreadPushCount;
-        size_t m_nThreadPreStoreSize;
+        static size_t s_nThreadPushCount;
+        static size_t s_nThreadPreStoreSize;
 
     protected:
         template <class Queue>
@@ -199,7 +197,7 @@ namespace {
 
             size_t nPostTestPops = 0;
             {
-                value_type v;
+                value_type* v;
                 while ( q.pop( v, 0))
                     ++nPostTestPops;
             }
@@ -231,13 +229,13 @@ namespace {
             propout() << std::make_pair("empty_pops", nPopFalse);
 
             EXPECT_EQ( nTotalPops + nPostTestPops, s_nQueueSize ) << "nTotalPops=" << nTotalPops << ", nPostTestPops=" << nPostTestPops;
-            value_type v;
+            value_type* v;
             EXPECT_FALSE( q.pop(v, 0));
 
             // Test consistency of popped sequence
             for ( size_t nWriter = 0; nWriter < s_nThreadCount; ++nWriter ) {
                 std::vector<size_t> arrData;
-                arrData.reserve( m_nThreadPushCount );
+                arrData.reserve( s_nThreadPushCount );
                 for ( size_t nReader = 0; nReader < arrConsumer.size(); ++nReader ) {
                     auto it = arrConsumer[nReader]->m_WriterData[nWriter].begin();
                     auto itEnd = arrConsumer[nReader]->m_WriterData[nWriter].end();
@@ -260,24 +258,26 @@ namespace {
                 }
 
                 EXPECT_EQ( arrData[0], 0u ) << "producer=" << nWriter;
-                EXPECT_EQ( arrData[arrData.size() - 1], m_nThreadPushCount - 1 ) << "producer=" << nWriter;
+                EXPECT_EQ( arrData[arrData.size() - 1], s_nThreadPushCount - 1 ) << "producer=" << nWriter;
             }
         }
 
         template <class Queue>
-        void test_queue( Queue& q)
+        void test_queue( Queue& q, typename Queue::value_type* values)
         {
             typedef Consumer<Queue> consumer_type;
             typedef Producer<Queue> producer_type;
 
-            m_nThreadPushCount = s_nQueueSize / s_nThreadCount;
-            s_nQueueSize = m_nThreadPushCount * s_nThreadCount;
-
             cds_test::thread_pool& pool = get_pool();
-            pool.add( new producer_type( pool, q, m_nThreadPushCount), s_nThreadCount );
+            pool.add( new producer_type( pool, q, s_nThreadPushCount), s_nThreadCount );
+            for(size_t i = 0; i < pool.size(); ++i) {
+              auto& producer = static_cast<producer_type&>(pool.get(i));
+              producer.values = values;
+              values += s_nThreadPushCount;
+            }
             pool.run();
             pool.clear();
-            pool.add( new consumer_type( pool, q, m_nThreadPushCount ), s_nThreadCount );
+            pool.add( new consumer_type( pool, q, s_nThreadPushCount ), s_nThreadCount );
             size_t writer_id = 0;
             for ( size_t i = 0; i < pool.size(); ++i ) {
                 cds_test::thread& thr = pool.get(i);
@@ -315,7 +315,8 @@ namespace {
         template <class Queue>
         void test( Queue& q)
         {
-            test_queue( q );
+            cds::details::memkind_vector<typename Queue::value_type> values(s_nQueueSize);
+            test_queue( q, values.data());
             analyze( q );
             propout() << q.statistics();
         }
@@ -333,6 +334,9 @@ namespace {
 
             s_nQueueSize *= s_nThreadCount;
 
+            s_nThreadPushCount = s_nQueueSize / s_nThreadCount;
+            s_nQueueSize = s_nThreadPushCount * s_nThreadCount;
+
             std::cout << "[ STAT     ] ThreadCount = " << s_nThreadCount << std::endl;
             std::cout << "[ STAT     ] QueueSize = " << s_nQueueSize << std::endl;
 
@@ -343,6 +347,11 @@ namespace {
 
         //static void TearDownTestCase();
     };
+
+    template<class Queue>
+    size_t sb_queue_pop<Queue>::s_nThreadPushCount;
+    template<class Queue>
+    size_t sb_queue_pop<Queue>::s_nThreadPreStoreSize;
 
     using simple_sb_queue_pop = sb_queue_pop<>;
 

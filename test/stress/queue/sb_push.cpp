@@ -9,6 +9,7 @@
 #include <unordered_map>
 
 #include <boost/optional.hpp>
+#include <cds/details/memkind_allocator.h>
 
 #include <cds/container/sb_basket_queue.h>
 #include <cds/container/wf_queue.h>
@@ -72,12 +73,12 @@ namespace {
                 const auto id_ = id();
                 m_Topology.pin_thread(id_);
                 auto start = clock_type::now();
-                while ( i <= m_count ) {
-                    if ( m_Queue.push(value_type{id_, i}, id_)) {
-                        ++i;
-                    }
-                    else
-                        ++m_nPushFailed;
+                for(size_t i = 1; i <= m_count; ++i, ++values) {
+                  values->first = id_;
+                  values->second = i;
+                  while(!m_Queue.push(values, id_)) {
+                    ++m_nPushFailed;
+                  }
                 }
                 auto end = clock_type::now();
                 m_Duration = std::chrono::duration_cast<duration_type>(end - start);
@@ -92,6 +93,7 @@ namespace {
             duration_type       m_Duration;
 
             size_t m_count;
+            typename Queue::value_type* values;
         };
 
     public:
@@ -111,6 +113,10 @@ namespace {
             s_Topology = Topology(s_nThreadCount);
 
             s_nQueueSize *= s_nThreadCount;
+
+            s_nThreadPushCount = s_nQueueSize / s_nThreadCount;
+            s_nQueueSize = s_nThreadPushCount * s_nThreadCount;
+
 
             std::cout << "[ STAT     ] ThreadCount = " << s_nThreadCount << std::endl;
             std::cout << "[ STAT     ] QueueSize = " << s_nQueueSize << std::endl;
@@ -154,15 +160,19 @@ namespace {
         template <class Queue, class HasBaskets>
         void test( Queue& q, HasBaskets)
         {
-            s_nThreadPushCount = s_nQueueSize / s_nThreadCount;
-            s_nQueueSize = s_nThreadPushCount * s_nThreadCount;
-
             propout() << std::make_pair( "producer_count", s_nThreadCount )
                 << std::make_pair( "queue_size", s_nQueueSize );
+
+            cds::details::memkind_vector<typename Queue::value_type> storage(s_nQueueSize);
 
             cds_test::thread_pool& pool = get_pool();
 
             pool.add( new Producer<Queue>( pool, q, *s_Topology, s_nThreadPushCount), s_nThreadCount );
+            auto pos = storage.data();
+            for(size_t i = 0; i < pool.size(); ++i, pos += s_nThreadPushCount) {
+              auto& th = static_cast<Producer<Queue>&>(pool.get(i));
+              th.values = pos;
+            }
 
             cds::details::SystemTimer timer;
 
@@ -186,12 +196,13 @@ namespace {
             std::vector<record> values;
             values.reserve(s_nQueueSize);
             int pops = 0;
-            typename Queue::value_type value{-1, -1};
+            typename Queue::value_type* value = nullptr;
             cds::uuid_type basket = 0;
             while(pop(q, value, 0, basket, HasBaskets{})) {
+              EXPECT_NE(nullptr, value);
               ++pops;
-              values.emplace_back(record{value.first, value.second, basket});
-              value = typename Queue::value_type{-1, -1};
+              values.emplace_back(record{value->first, value->second, basket});
+              value = nullptr;
               basket = 0;
             }
             EXPECT_EQ(s_nQueueSize, pops);
