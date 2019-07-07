@@ -184,9 +184,6 @@ namespace cds { namespace container {
               return flag;
             }
             bool extract(T &t, size_t id) {
-              if(empty()) {
-                return false;
-              }
               const size_t size = m_size;
               size_t index;
               while((index = counter.value.fetch_add(1, std::memory_order_acquire)) < size) {
@@ -195,7 +192,7 @@ namespace cds { namespace container {
                 }
               }
               if(index == size) {
-                status.value.store(EMPTY, std::memory_order_release);
+                status.value.store(EMPTY, std::memory_order_seq_cst);
               }
               return false;
             }
