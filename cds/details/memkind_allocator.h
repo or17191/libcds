@@ -49,5 +49,8 @@ namespace cds { namespace details {
             memkind_free(MEMKIND_HUGETLB, p);
           }
         };
+
+        template <class T>
+        using memkind_vector = std::vector<T, memkind_allocator<T>>;
  }}
 #endif // CDSLIB_DETAILS_MEMKIND_ALLOCATOR_H

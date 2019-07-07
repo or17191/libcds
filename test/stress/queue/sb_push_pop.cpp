@@ -8,6 +8,7 @@
 #include <cds/container/sb_basket_queue.h>
 #include <cds/container/wf_queue.h>
 #include <cds/container/bags.h>
+#include <cds/details/memkind_allocator.h>
 
 #include <vector>
 #include <algorithm>
@@ -39,16 +40,14 @@ namespace {
     };
 
     template <class Queue>
-    size_t push_many(Queue& queue, const size_t first, const size_t last, const size_t producer) {
+    size_t push_many(Queue& queue, const size_t first, const size_t last, const size_t producer,
+        typename Queue::value_type* values) {
       size_t failed = 0;
-      old_value v;
-      v.nNo = first;
-      v.nWriterNo = producer;
-      while(v.nNo < last) {
-        if ( queue.push( v, producer )) {
-            ++v.nNo;
-        } else {
-            ++failed;
+      for(size_t i = first; i < last; ++i, ++values) {
+        values->nNo = i;
+        values->nWriterNo = producer;
+        while(!queue.push(values, producer)) {
+          ++failed;
         }
       }
       return failed;
@@ -100,7 +99,7 @@ namespace {
             {
                 s_Topology->pin_thread(id());
                 auto start = clock_type::now();
-                m_nPushFailed += push_many(m_Queue, m_nStart, m_nEnd, m_nWriterId);
+                m_nPushFailed += push_many(m_Queue, m_nStart, m_nEnd, m_nWriterId, m_values);
                 auto end = clock_type::now();
                 m_Duration = std::chrono::duration_cast<duration_type>(end - start);
                 s_nProducerDone.fetch_add( 1 );
@@ -114,6 +113,7 @@ namespace {
             size_t const        m_nEnd;
             size_t              m_nWriterId;
             duration_type       m_Duration;
+            typename Queue::value_type*    m_values{};
         };
 
         template <class Queue, class HasBasket>
@@ -172,11 +172,11 @@ namespace {
                 return new Consumer( *this );
             }
 
-            bool pop(value_type& value, size_t tid, cds::uuid_type& basket, std::true_type) {
+            bool pop(value_type*& value, size_t tid, cds::uuid_type& basket, std::true_type) {
               return m_Queue.pop(value, tid, std::addressof(basket));
             }
 
-            bool pop(value_type& value, size_t tid, cds::uuid_type& basket, std::false_type) {
+            bool pop(value_type*& value, size_t tid, cds::uuid_type& basket, std::false_type) {
               basket = 0;
               return m_Queue.pop(value, tid);
             }
@@ -188,15 +188,15 @@ namespace {
                 m_nPopped = 0;
                 m_nBadWriter = 0;
                 const size_t nTotalWriters = s_nProducerThreadCount;
-                value_type v;
+                value_type* v;
                 bool writers_done = false;
                 size_t basket;
                 auto start = clock_type::now();
                 while ( true ) {
                     if (pop(v, m_nReaderId, basket, HasBasket{})) {
                         ++m_nPopped;
-                        if ( v.nWriterNo < nTotalWriters )
-                            m_WriterData[ v.nWriterNo ].emplace_back( v.nNo, basket );
+                        if ( v->nWriterNo < nTotalWriters )
+                            m_WriterData[ v->nWriterNo ].emplace_back( v->nNo, basket );
                         else
                             ++m_nBadWriter;
                     }
@@ -245,7 +245,7 @@ namespace {
 
             size_t nPostTestPops = 0;
             {
-                value_type v;
+                value_type* v;
                 while ( q.pop( v, 0))
                     ++nPostTestPops;
             }
@@ -286,7 +286,7 @@ namespace {
             propout() << std::make_pair("empty_pops", nPopFalse);
 
             EXPECT_EQ( nTotalPops + nPostTestPops, s_nQueueSize ) << "nTotalPops=" << nTotalPops << ", nPostTestPops=" << nPostTestPops;
-            value_type v;
+            value_type* v;
             EXPECT_FALSE( q.pop(v, 0));
 
             // Test consistency of popped sequence
@@ -322,8 +322,8 @@ namespace {
             check_baskets(baskets.begin(), baskets.end(), HasBaskets{});
         }
 
-        template<class Producer, class Consumer>
-        static void setup_pool_ids(cds_test::thread_pool& pool, bool independent_ids) {
+        template<class Producer, class Consumer, class Pointer>
+        static void setup_pool_ids(cds_test::thread_pool& pool, bool independent_ids, Pointer& ptr) {
           size_t writer_id = 0;
           size_t reader_id = 0;
           for ( size_t i = 0; i < pool.size(); ++i ) {
@@ -340,12 +340,14 @@ namespace {
                   assert( thr.type() == producer_thread );
                   Producer& producer = static_cast<Producer&>( thr );
                   producer.m_nWriterId = writer_id++;
+                  producer.m_values = ptr;
+                  ptr += (producer.m_nEnd - producer.m_nStart);
               }
           }
         }
 
         template <class Queue, class HasBaskets>
-        void test_queue( Queue& q, bool independent_ids, bool sequential_pre_store, HasBaskets )
+        void test_queue( Queue& q, typename Queue::value_type* values, bool independent_ids, bool sequential_pre_store, HasBaskets )
         {
             typedef Consumer<Queue, HasBaskets> consumer_type;
             typedef Producer<Queue> producer_type;
@@ -361,19 +363,20 @@ namespace {
             if (sequential_pre_store) {
               std::cout << "[ STAT     ] Sequential pre store" << std::endl;
               for(size_t i = 0; i < s_nProducerThreadCount; ++i) {
-                size_t failed = push_many(q, 0, m_nThreadPreStoreSize, i);
+                size_t failed = push_many(q, 0, m_nThreadPreStoreSize, i, values);
                 EXPECT_EQ(0, failed);
+                values += m_nThreadPreStoreSize;
               }
             } else {
               std::cout << "[ STAT     ] Parallel pre store" << std::endl;
               pool.add( new producer_type( pool, q, 0 , m_nThreadPreStoreSize), s_nProducerThreadCount );
-              setup_pool_ids<producer_type, consumer_type>(pool, independent_ids);
+              setup_pool_ids<producer_type, consumer_type>(pool, independent_ids, values);
               pool.run();
               pool.reset();
             }
             pool.add( new producer_type( pool, q, m_nThreadPreStoreSize, m_nThreadPushCount), s_nProducerThreadCount );
             pool.add( new consumer_type( pool, q, m_nThreadPushCount ), s_nConsumerThreadCount );
-            setup_pool_ids<producer_type, consumer_type>(pool, independent_ids);
+            setup_pool_ids<producer_type, consumer_type>(pool, independent_ids, values);
             s_nPreStoreDone = true;
             s_nProducerDone.store( 0 );
             std::chrono::milliseconds duration = pool.run();
@@ -417,7 +420,8 @@ namespace {
         template <class Queue, class HasBaskets>
         void test( Queue& q, bool independent_ids, bool sequential_pre_store, HasBaskets hb)
         {
-            test_queue( q , independent_ids, sequential_pre_store, hb);
+            cds::details::memkind_vector<typename Queue::value_type> values(s_nQueueSize);
+            test_queue( q , values.data(), independent_ids, sequential_pre_store, hb);
             analyze( q , hb);
             propout() << q.statistics();
         }
