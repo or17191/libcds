@@ -473,6 +473,7 @@ namespace cds { namespace container {
 
                 marked_ptr pNext{};
                 pNew->m_basket_id = t->m_basket_id + 1;
+                node_ptr->m_bag.unsafe_insert(val, id);
                 const auto res = insert_policy::template _<memory_model>(t, marked_ptr(pNew), pNext, m_ids);
 
                 if ( res == insert_policy::InsertResult::SUCCESSFUL_INSERT) {
@@ -487,11 +488,10 @@ namespace cds { namespace container {
                     //   throw std::logic_error(s.str());
                     // };
                     pNew = nullptr; // Need to do this after we update node_ptr
-                    if (cds_likely(node->m_bag.insert(val, id, std::true_type{}))) {
-                        th.last_node = node->m_basket_id;
-                        break;
-                    }
+                    //th.last_node = node->m_basket_id;
+                    break;
                 } else if ( res == insert_policy::InsertResult::FAILED_INSERT ) {
+                    node_ptr->m_bag.unsafe_extract(val, id);
                     // Try adding to basket
                     tstat.onTryAddBasket();
 

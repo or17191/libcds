@@ -171,6 +171,16 @@ namespace cds { namespace container {
             {
                 assert(m_size <= MAX_THREADS);
             }
+            void unsafe_insert(T& t, size_t id) {
+              auto& v = m_bag[id].value;
+              v.flag.store(EXTRACT, std::memory_order_relaxed);
+              v.value = std::move(t);
+            }
+            void unsafe_extract(T& t, size_t id) {
+              auto& v = m_bag[id].value;
+              v.flag.store(INSERT, std::memory_order_relaxed);
+              t = std::move(v.value);
+            }
             static int attempt_pop(T& t, value& v) {
               // int flag = v.flag.load(std::memory_order_relaxed);
               // if (flag == EMPTY) {
