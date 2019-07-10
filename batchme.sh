@@ -5,7 +5,7 @@ source ${HOME}/.zshrc
 set +x
 
 # tnums=(1 2 4 8 12 16 20 24 28 32 36 40)
-tnums=(1 2 4 12 20 28 32 36 40)
+tnums=(1 2 $(seq 4 4 80))
 # N=30
 N=5
 
@@ -27,7 +27,6 @@ N=5
 #   done
 # done 
 
-export PACKED=
 # export NUMA=
 
 function test_executable() {
@@ -42,10 +41,27 @@ function test_executable() {
    
   echo "Testing ${test_name}"
   echo "${tests}"
+  if [ $test_name = "stress-queue-push-pop" ]; then
+    # Pushers and poppers in different sockets
+    unset PACKED
+    unset SPREAD
+    unset NUMA
+  else
+    # Only one type of thread, both in the same socket
+    export PACKED=
+    unset SPREAD
+    unset NUMA
+  fi
 
   for n in $tnums; do
-    if [ $test_name = "stress-queue-push-pop" ] && [ $n -eq 1 ]; then
-      continue;
+    if [ $test_name = "stress-queue-push-pop" ]; then
+      if [ $n -eq 1 ]; then
+        continue;
+      fi
+    else
+      if [ $n -ge 44 ]; then
+        continue;
+      fi
     fi
     echo "TNUMS=${n}"
     cp "test.conf.template" "test.conf";
@@ -65,6 +81,10 @@ function test_executable() {
       done
     done
   done 
+
+  unset PACKED
+  unset SPREAD
+  unset NUMA
 }
 
 test_executable "stress-queue-$1"
