@@ -39,18 +39,34 @@ namespace {
         size_t nWriterNo;
     };
 
+    struct writer_compare {
+      const std::less<size_t> cmp;
+      using pair = std::pair<old_value*, size_t>;
+      bool operator()(const pair& v, size_t writer) const { return cmp(v.first->nWriterNo, writer); }
+      bool operator()(size_t writer, const pair& v) const { return cmp(writer, v.first->nWriterNo); }
+      bool operator()(const pair& lhs, const pair& rhs) const { return cmp(lhs.first->nWriterNo, rhs.first->nWriterNo); }
+    };
+
     template <class Queue>
     size_t push_many(Queue& queue, const size_t first, const size_t last, const size_t producer,
         typename Queue::value_type* values) {
       size_t failed = 0;
       for(size_t i = first; i < last; ++i, ++values) {
-        values->nNo = i;
-        values->nWriterNo = producer;
         while(!queue.push(values, producer)) {
           ++failed;
         }
       }
       return failed;
+    }
+
+    template <class Value>
+    void push_many_setup(const size_t first, const size_t last, const size_t producer,
+        Value* values) {
+      size_t failed = 0;
+      for(size_t i = first; i < last; ++i, ++values) {
+        values->nNo = i;
+        values->nWriterNo = producer;
+      }
     }
 
     template<class Value = old_value>
@@ -95,6 +111,11 @@ namespace {
                 return new Producer( *this );
             }
 
+            virtual void SetUp() {
+              thread::SetUp();
+              push_many_setup(m_nStart, m_nEnd, m_nWriterId, m_values);
+            }
+
             virtual void test()
             {
                 s_Topology->pin_thread(id());
@@ -130,19 +151,17 @@ namespace {
             size_t              m_nReaderId;
             duration_type       m_Duration;
 
-            typedef std::vector<std::pair<size_t, size_t>> popped_data;
+            typedef std::vector<std::pair<typename Queue::value_type*, size_t>> popped_data;
             typedef std::vector<size_t>::iterator       data_iterator;
             typedef std::vector<size_t>::const_iterator const_data_iterator;
 
-            std::vector<popped_data>        m_WriterData;
+            popped_data        m_WriterData;
 
         private:
             void initPoppedData()
             {
                 const size_t nProducerCount = s_nProducerThreadCount;
-                m_WriterData.resize( nProducerCount );
-                for ( size_t i = 0; i < nProducerCount; ++i )
-                    m_WriterData[i].reserve( m_nPushPerProducer );
+                m_WriterData.reserve( m_nPushPerProducer * nProducerCount );
             }
 
         public:
@@ -195,10 +214,8 @@ namespace {
                 while ( true ) {
                     if (pop(v, m_nReaderId, basket, HasBasket{})) {
                         ++m_nPopped;
-                        if ( v->nWriterNo < nTotalWriters )
-                            m_WriterData[ v->nWriterNo ].emplace_back( v->nNo, basket );
-                        else
-                            ++m_nBadWriter;
+                        // TODO bad writer
+                        m_WriterData.emplace_back(v, basket);
                     }
                     else {
                         ++m_nPopEmpty;
@@ -211,6 +228,15 @@ namespace {
                 auto end = clock_type::now();
                 m_Duration = std::chrono::duration_cast<duration_type>(end - start);
                 s_Topology->verify_pin(id());
+            }
+
+            virtual void TearDown() {
+              using element_type = std::pair<value_type*, size_t>;
+              thread::TearDown();
+              std::stable_sort(m_WriterData.begin(), m_WriterData.end(), writer_compare{});
+              auto pos = std::lower_bound(m_WriterData.begin(), m_WriterData.end(),
+                  s_nProducerThreadCount, writer_compare{});
+              m_nBadWriter = std::distance(pos, m_WriterData.end());
             }
         };
 
@@ -266,12 +292,7 @@ namespace {
                     nPopFalse += consumer.m_nPopEmpty;
                     arrConsumer.push_back( &consumer );
                     EXPECT_EQ( consumer.m_nBadWriter, 0u ) << "consumer_thread_no " << i;
-
-                    size_t nPopped = 0;
-                    for ( size_t n = 0; n < s_nProducerThreadCount; ++n )
-                        nPopped += consumer.m_WriterData[n].size();
-
-                    nPoppedItems += nPopped;
+                    nPoppedItems += consumer.m_WriterData.size();
                 }
                 else {
                     assert( thr.type() == producer_thread );
@@ -294,25 +315,29 @@ namespace {
                 std::vector<size_t> arrData;
                 arrData.reserve( s_nThreadPushCount );
                 for ( size_t nReader = 0; nReader < arrConsumer.size(); ++nReader ) {
-                    auto it = arrConsumer[nReader]->m_WriterData[nWriter].begin();
-                    auto itEnd = arrConsumer[nReader]->m_WriterData[nWriter].end();
+                    auto& consumer = *arrConsumer[nReader];
+                    auto rng = std::equal_range(consumer.m_WriterData.begin(), consumer.m_WriterData.end(),
+                        nWriter, writer_compare{});
+                    auto it = rng.first;
+                    auto itEnd = rng.second;
                     if ( it != itEnd ) {
                         auto itPrev = it;
+                        ASSERT_EQ(nWriter, it->first->nWriterNo);
                         for ( ++it; it != itEnd; ++it ) {
-                            EXPECT_LT( itPrev->first, it->first + nRightOffset ) << "consumer=" << nReader << ", producer=" << nWriter;
+                            ASSERT_LT( itPrev->first->nNo, it->first->nNo + nRightOffset ) << "consumer=" << nReader << ", producer=" << nWriter;
                             itPrev = it;
                         }
                     }
 
-                    for ( it = arrConsumer[nReader]->m_WriterData[nWriter].begin(); it != itEnd; ++it ) {
-                        arrData.push_back( it->first );
+                    for ( it = rng.first; it != rng.second; ++it ) {
+                        arrData.push_back( it->first->nNo );
                         baskets.push_back( it->second );
                     }
                 }
 
                 std::sort( arrData.begin(), arrData.end());
                 for ( size_t i=1; i < arrData.size(); ++i ) {
-                    EXPECT_EQ( arrData[i - 1] + 1, arrData[i] ) << "producer=" << nWriter;
+                    ASSERT_EQ( arrData[i - 1] + 1, arrData[i] ) << "producer=" << nWriter;
                 }
 
                 EXPECT_EQ( arrData[0], 0u ) << "producer=" << nWriter;
@@ -357,6 +382,7 @@ namespace {
             if (sequential_pre_store) {
               std::cout << "[ STAT     ] Sequential pre store" << std::endl;
               for(size_t i = 0; i < s_nProducerThreadCount; ++i) {
+                push_many_setup(0, s_nThreadPreStoreSize, i, values);
                 size_t failed = push_many(q, 0, s_nThreadPreStoreSize, i, values);
                 EXPECT_EQ(0, failed);
                 values += s_nThreadPreStoreSize;
