@@ -177,25 +177,21 @@ namespace cds { namespace container {
               v.store(ptr_t{nullptr, 0}, std::memory_order_relaxed);
             }
             static ptr_t attempt_pop(atomic_ptr_t& v) {
-              // int flag = v.flag.load(std::memory_order_relaxed);
-              // if (flag == EMPTY) {
-              //   return flag;
-              // }
               return v.exchange(ptr_t{nullptr, 1}, std::memory_order_acq_rel);
             }
             bool extract(T &t, size_t id) {
               const size_t size = m_size;
               size_t index;
               ptr_t ptr;
-              while((index = counter.value.fetch_add(1, std::memory_order_acquire)) < size) {
+              while((index = counter.value.fetch_add(1, std::memory_order_acq_rel)) < size) {
+                if(index == size - 1) {
+                  status.value.store(true, std::memory_order_seq_cst);
+                }
                 ptr = attempt_pop(m_bag[index].value);
                 if(ptr.ptr() != nullptr) {
                   t = ptr.ptr();
                   return true;
                 }
-              }
-              if(index == size) {
-                status.value.store(true, std::memory_order_seq_cst);
               }
               return false;
             }
