@@ -255,7 +255,7 @@ namespace cds { namespace container {
         struct thread_data
         {
             scoped_node_ptr node{nullptr};
-            cds::uuid_type last_node{0};
+            size_t last_node{0};
             stat stats;
         } __attribute__((aligned (cds::c_nCacheLineSize)));
         std::unique_ptr<thread_data[]> m_nodes_cache;
@@ -647,7 +647,8 @@ namespace cds { namespace container {
         {
             // Note:
             // If bDeque == false then the function is called from empty method and no real dequeuing operation is performed
-            auto& tstat = m_nodes_cache[id + m_ids].stats;
+            auto& tcache = m_nodes_cache[id + m_ids];
+            auto& tstat = tcache.stats;
 
             back_off bkoff;
 
