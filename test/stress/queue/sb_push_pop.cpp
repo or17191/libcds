@@ -231,7 +231,6 @@ namespace {
             }
 
             virtual void TearDown() {
-              using element_type = std::pair<value_type*, size_t>;
               thread::TearDown();
               std::stable_sort(m_WriterData.begin(), m_WriterData.end(), writer_compare{});
               auto pos = std::lower_bound(m_WriterData.begin(), m_WriterData.end(),

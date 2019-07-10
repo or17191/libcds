@@ -66,6 +66,16 @@ namespace {
                 return new Producer( *this );
             }
 
+            virtual void SetUp() {
+              thread::SetUp();
+              const auto id_ = id();
+              auto pos = values;
+              for(size_t i = 1; i <= m_count; ++i, ++pos) {
+                pos->first = id_;
+                pos->second = i;
+              }
+            }
+
             virtual void test()
             {
                 using value_type = typename Queue::value_type;
@@ -74,8 +84,6 @@ namespace {
                 m_Topology.pin_thread(id_);
                 auto start = clock_type::now();
                 for(size_t i = 1; i <= m_count; ++i, ++values) {
-                  values->first = id_;
-                  values->second = i;
                   while(!m_Queue.push(values, id_)) {
                     ++m_nPushFailed;
                   }
