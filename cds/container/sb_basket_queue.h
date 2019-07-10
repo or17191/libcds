@@ -553,7 +553,7 @@ namespace cds { namespace container {
           while(true) {
             if((ret = _xbegin()) == _XBEGIN_STARTED) {
               old_value = ptr.load(std::memory_order_relaxed);
-              if(old_value == new_value) {
+              if(cds_likely(old_value == new_value)) {
                 _xabort(0x1);
               }
               ptr.store(new_value, std::memory_order_relaxed);
