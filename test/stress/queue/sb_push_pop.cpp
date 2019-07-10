@@ -517,7 +517,7 @@ namespace {
         typedef type_name<test_fixture> queue_type; \
         ASSERT_EQ(s_nConsumerThreadCount, s_nProducerThreadCount); \
         queue_type queue( s_nConsumerThreadCount); \
-        test( queue, true , false, std::false_type{}); \
+        test( queue, true , false, std::true_type{}); \
     }
 
 #define CDSSTRESS_WFQueue_F( test_fixture, type_name ) \
@@ -565,7 +565,7 @@ namespace {
     };
 
     struct htm_id_traits : cds::container::sb_basket_queue::traits {
-      typedef cds::intrusive::htm_basket_queue::htm_insert<35, 20, 5> insert_policy;
+      typedef cds::intrusive::htm_basket_queue::htm_insert<25, 20, 5> insert_policy;
     };
     struct htm_mod_id_traits : cds::container::sb_basket_queue::traits {
       typedef cds::intrusive::htm_basket_queue::htm_insert<20, 20, 5> insert_policy;

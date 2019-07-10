@@ -267,7 +267,6 @@ namespace cds { namespace container {
 
         struct dequeue_result
         {
-            typename gc::template GuardArray<3> guards;
             T* value;
             uuid_type basket_id;
         };
@@ -685,7 +684,7 @@ namespace cds { namespace container {
                     if(hops >= m_nMaxHops && advance_node(m_pHead, iter)) {
                       free_chain(id);
                     }
-                    //res.basket_id = value_node->m_basket_id;
+                    res.basket_id = value_node->m_basket_id;
                     break;
                 } else {
                     if(pNext.ptr() == nullptr) {

@@ -265,7 +265,7 @@ namespace {
     TEST_F( sb_queue_push, QueueType ) \
     { \
         QueueType q(s_nThreadCount); \
-        test( q , std::false_type{}); \
+        test( q , std::true_type{}); \
         QueueType::gc::force_dispose(); \
     }
 
@@ -282,7 +282,7 @@ namespace {
     };
 
     struct htm_id_traits : cds::container::sb_basket_queue::traits {
-      typedef cds::intrusive::htm_basket_queue::htm_insert<10, 20, 5> insert_policy;
+      typedef cds::intrusive::htm_basket_queue::htm_insert<25, 20, 5> insert_policy;
     };
     struct htm_id_stat_traits : public htm_id_traits
     {

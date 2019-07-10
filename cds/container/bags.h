@@ -181,7 +181,7 @@ namespace cds { namespace container {
               // if (flag == EMPTY) {
               //   return flag;
               // }
-              return v.exchange(ptr_t{nullptr, 1}, std::memory_order_release);
+              return v.exchange(ptr_t{nullptr, 1}, std::memory_order_acq_rel);
             }
             bool extract(T &t, size_t id) {
               const size_t size = m_size;
@@ -199,43 +199,13 @@ namespace cds { namespace container {
               }
               return false;
             }
-            /*
             template <class First>
-            bool insert(T &t, size_t id, First)
+            bool insert(T t, size_t id, First)
             {
                 assert(id < m_size);
                 auto &v = m_bag[id].value;
-                int flag = INSERT;
-                v.value = std::move(t);
-                bool ret = v.flag.compare_exchange_strong(flag, EXTRACT, std::memory_order_acq_rel);
-                if(ret) {
-                  return true;
-                } else {
-                  t = std::move(v.value);
-                  return false;
-                }
-            }
-            */
-            template <class First>
-            bool insert(T t, const size_t id, First)
-            {
-                assert(id < m_size);
-                auto &v = m_bag[id].value;
-                int ret;
-                while(true) {
-                  if ((ret = _xbegin()) == _XBEGIN_STARTED) {
-                    auto value = v.load(std::memory_order_relaxed);
-                    if (value.bits()) { // Was emptied
-                      _xabort(0x1);
-                    }
-                    v.store(ptr_t{t}, std::memory_order_relaxed);
-                    _xend();
-                    return true;
-                  } else if (ret & _XABORT_EXPLICIT) {
-                    break;
-                  }
-                }
-                return false;
+                ptr_t old{nullptr, 0};
+                return v.compare_exchange_strong(old, ptr_t{t}, std::memory_order_acq_rel);
             }
             /*
             bool extract(T &t, size_t id) {
