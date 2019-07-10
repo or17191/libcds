@@ -484,7 +484,7 @@ namespace cds { namespace container {
                     //th.last_node = node->m_basket_id;
                     break;
                 } else if ( res == insert_policy::InsertResult::FAILED_INSERT ) {
-                    node_ptr->m_bag.unsafe_extract(val, id);
+                    node_ptr->m_bag.unsafe_extract(id);
                     // Try adding to basket
                     tstat.onTryAddBasket();
 

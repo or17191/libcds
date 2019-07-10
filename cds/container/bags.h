@@ -8,6 +8,7 @@
 #include <cds/algo/atomic.h>
 #include <cds/container/treiber_stack.h>
 #include <cds/details/memkind_allocator.h>
+#include <cds/details/marked_ptr.h>
 #include <cds/sync/htm.h>
 #include <cds/gc/hp.h>
 
@@ -145,24 +146,20 @@ namespace cds { namespace container {
             }
         };
         */
-        static constexpr int INSERT = 0;
-        static constexpr int EXTRACT = 1;
-        static constexpr int EMPTY = 2;
 
         template <class T>
         class IdBag
         {
         private:
-            struct value
-            {
-                std::atomic<int> flag{INSERT};
-                T value{};
-            };
-            using value_type = PaddedValue<value>;
+            static_assert(std::is_pointer<T>::value, "");
+            using ptr_t = cds::details::marked_ptr<typename std::remove_pointer<T>::type, 1>;
+            using atomic_ptr_t = std::atomic<ptr_t>;
+
+            using value_type = PaddedValue<atomic_ptr_t>;
             static constexpr size_t MAX_THREADS=40;
             std::array<value_type, MAX_THREADS> m_bag;
-            TwicePaddedValue<std::atomic<int>> counter{0};
-            TwicePaddedValue<std::atomic<int>> status{INSERT};
+            TwicePaddedValue<std::atomic<size_t>> counter{0};
+            TwicePaddedValue<std::atomic<bool>> status{0};
             const size_t m_size;
 
         public:
@@ -171,39 +168,34 @@ namespace cds { namespace container {
             {
                 assert(m_size <= MAX_THREADS);
             }
-            void unsafe_insert(T& t, size_t id) {
+            void unsafe_insert(T t, size_t id) {
               auto& v = m_bag[id].value;
-              v.flag.store(EXTRACT, std::memory_order_relaxed);
-              v.value = std::move(t);
+              v.store(ptr_t{t}, std::memory_order_relaxed);
             }
-            void unsafe_extract(T& t, size_t id) {
+            void unsafe_extract(size_t id) {
               auto& v = m_bag[id].value;
-              v.flag.store(INSERT, std::memory_order_relaxed);
-              t = std::move(v.value);
+              v.store(ptr_t{nullptr, 0}, std::memory_order_relaxed);
             }
-            static int attempt_pop(T& t, value& v) {
+            static ptr_t attempt_pop(atomic_ptr_t& v) {
               // int flag = v.flag.load(std::memory_order_relaxed);
               // if (flag == EMPTY) {
               //   return flag;
               // }
-              int flag = v.flag.exchange(EMPTY, std::memory_order_release);
-              // We still get a lot of EMPTYs here
-              if(flag == EXTRACT) {
-                t = std::move(v.value);
-                return flag;
-              }
-              return flag;
+              return v.exchange(ptr_t{nullptr, 1}, std::memory_order_release);
             }
             bool extract(T &t, size_t id) {
               const size_t size = m_size;
               size_t index;
+              ptr_t ptr;
               while((index = counter.value.fetch_add(1, std::memory_order_acquire)) < size) {
-                if(attempt_pop(t, m_bag[index].value) == EXTRACT) {
+                ptr = attempt_pop(m_bag[index].value);
+                if(ptr.ptr() != nullptr) {
+                  t = ptr.ptr();
                   return true;
                 }
               }
               if(index == size) {
-                status.value.store(EMPTY, std::memory_order_seq_cst);
+                status.value.store(true, std::memory_order_seq_cst);
               }
               return false;
             }
@@ -225,19 +217,18 @@ namespace cds { namespace container {
             }
             */
             template <class First>
-            bool insert(T &t, const size_t id, First)
+            bool insert(T t, const size_t id, First)
             {
                 assert(id < m_size);
                 auto &v = m_bag[id].value;
                 int ret;
                 while(true) {
                   if ((ret = _xbegin()) == _XBEGIN_STARTED) {
-                    auto flag = v.flag.load(std::memory_order_relaxed);
-                    if (flag != INSERT) {
+                    auto value = v.load(std::memory_order_relaxed);
+                    if (value.bits()) { // Was emptied
                       _xabort(0x1);
                     }
-                    v.flag.store(EXTRACT, std::memory_order_relaxed);
-                    v.value = std::move(t);
+                    v.store(ptr_t{t}, std::memory_order_relaxed);
                     _xend();
                     return true;
                   } else if (ret & _XABORT_EXPLICIT) {
@@ -296,7 +287,7 @@ namespace cds { namespace container {
             }
             */
             bool empty() const {
-              return status.value.load(std::memory_order_acquire) == EMPTY;
+              return status.value.load(std::memory_order_acquire);
             }
         };
 
