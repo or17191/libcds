@@ -42,10 +42,9 @@ namespace topology {
         for (const auto &cpu : cpus) {
             m_info[cpu.socket][cpu.core].insert(cpu.id);
         }
-        m_max_threads = 0;
+        m_max_threads = cpus.size();
         std::size_t socket_size = m_info.begin()->second.size();
         for (const auto &element : m_info) {
-            m_max_threads += element.second.size();
             if (socket_size != element.second.size()) {
                 throw std::runtime_error("Unequall socket sizes");
             }
@@ -113,7 +112,9 @@ namespace topology {
         // Take the smallest amount of sockets.
         for (const auto &element : m_info) {
             sockets++;
-            populus += element.second.size();
+            for(auto& e: element.second) {
+              populus += e.second.size();
+            }
             if (populus >= m_threads_num) {
                 break;
             }
@@ -130,8 +131,13 @@ namespace topology {
             std::size_t end = per_socket(s);
             m_node_info.emplace_back(end);
             auto socket_pos = info_pos->second.begin();
-            for (std::size_t c = 0; c < end; ++c, ++socket_pos) {
-                m_mapping.emplace_back(c, info_pos->first, *socket_pos->second.begin());
+            size_t c = 0;
+            while(c < end) {
+              for(auto& e: socket_pos->second) {
+                m_mapping.emplace_back(c, info_pos->first, e);
+                ++c;
+              }
+              ++socket_pos;
             }
         }
     }
@@ -154,7 +160,7 @@ namespace topology {
           err << "Too many threads. For this amount of sockets, use " << m_mapping.size() << " threads.";
           throw std::runtime_error(err.str());
       }
-      // Sorts by (hypercore, logical core, socket)
+      // Sorts by (hypercore, socket, logical_core)
       std::sort(m_mapping.begin(), m_mapping.end(), [](const core_id& lhs, const core_id& rhs) {
         return std::less<size_t>{}(lhs.physical, rhs.physical);
       });
