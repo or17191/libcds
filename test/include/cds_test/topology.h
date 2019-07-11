@@ -41,6 +41,7 @@ namespace topology {
         const mapping_type &mapping() const { return m_mapping; }
         const node_info_type &node_info() const { return m_node_info; }
         const std::size_t &threads_num() const { return m_threads_num; }
+        const std::size_t &socket_boundary() const;
 
         void pin_thread(std::size_t thread_num) const;
         void verify_pin(std::size_t thread_num) const;
@@ -62,6 +63,8 @@ namespace topology {
 
         std::size_t m_threads_num;
         std::size_t m_max_threads;
+        std::size_t m_sockets;
+        std::size_t m_socket_boundary;
         info_type m_info;
         mapping_type m_mapping;
         node_info_type m_node_info;

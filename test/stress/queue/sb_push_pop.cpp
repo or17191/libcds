@@ -499,6 +499,7 @@ namespace {
             s_Topology = Topology(s_nProducerThreadCount + s_nConsumerThreadCount);
 
             std::cout << "[ STAT     ] Topology = " << *s_Topology << std::endl;
+            std::cout << "[ STAT     ] Socket boundary = " << s_Topology->socket_boundary() << std::endl;
         }
 
         //static void TearDownTestCase();
@@ -525,7 +526,7 @@ namespace {
     { \
         typedef type_name<test_fixture> queue_type; \
         ASSERT_EQ(s_nConsumerThreadCount, s_nProducerThreadCount); \
-        queue_type queue( s_nConsumerThreadCount + s_nProducerThreadCount); \
+        queue_type queue( s_nConsumerThreadCount + s_nProducerThreadCount, s_Topology->socket_boundary()); \
         test( queue, false , true, std::false_type{}); \
     }
 

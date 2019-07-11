@@ -107,11 +107,11 @@ namespace topology {
 
     void Topology::make_default_mapping()
     {
-        std::size_t sockets = 0;
+        m_sockets = 0;
         std::size_t populus = 0;
         // Take the smallest amount of sockets.
         for (const auto &element : m_info) {
-            sockets++;
+            m_sockets++;
             for(auto& e: element.second) {
               populus += e.second.size();
             }
@@ -120,14 +120,15 @@ namespace topology {
             }
         }
         assert(sockets != 0);
-        std::size_t step_size = m_threads_num % sockets;
-        std::size_t common_size = m_threads_num / sockets;
+        std::size_t step_size = m_threads_num % m_sockets;
+        std::size_t common_size = m_threads_num / m_sockets;
         auto per_socket = [&step_size,
                            &common_size](const std::size_t s) -> std::size_t {
             return common_size + ((s < step_size) ? 1 : 0);
         };
+        m_socket_boundary = per_socket(0);
         auto info_pos = m_info.begin();
-        for (std::size_t s = 0; s < sockets; ++s, ++info_pos) {
+        for (std::size_t s = 0; s < m_sockets; ++s, ++info_pos) {
             std::size_t end = per_socket(s);
             m_node_info.emplace_back(end);
             auto socket_pos = info_pos->second.begin();
@@ -142,11 +143,18 @@ namespace topology {
         }
     }
 
+    const std::size_t &Topology::socket_boundary() const {
+      if(m_sockets > 2) {
+        throw std::logic_error("Can't have socket boundary for that many sockets");
+      }
+      return m_socket_boundary;
+    }
+
     void Topology::make_specific_mapping(bool packed, bool numa)
     {
-      size_t sockets = numa ? m_info.size() : 1;
+      m_sockets = numa ? m_info.size() : 1;
       auto info_pos = m_info.begin();
-      for(size_t s = 0; s < sockets; ++s, ++info_pos) {
+      for(size_t s = 0; s < m_sockets; ++s, ++info_pos) {
         size_t core = 0;
         auto& socket = info_pos->second;
         for(auto socket_pos = socket.begin(); socket_pos != socket.end(); ++core, ++socket_pos) {
@@ -155,6 +163,7 @@ namespace topology {
           }
         }
       }
+      m_socket_boundary = m_threads_num / m_sockets;
       if (m_threads_num > m_mapping.size()) {
           std::ostringstream err;
           err << "Too many threads. For this amount of sockets, use " << m_mapping.size() << " threads.";
@@ -171,8 +180,8 @@ namespace topology {
         });
       }
       m_mapping.erase(std::next(m_mapping.begin(), m_threads_num), m_mapping.end());
-      m_node_info.resize(sockets);
-      std::fill_n(m_node_info.begin(), sockets, 0);
+      m_node_info.resize(m_sockets);
+      std::fill_n(m_node_info.begin(), m_sockets, 0);
       for(auto& c: m_mapping) {
         m_node_info[c.socket]++;
       }

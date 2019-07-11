@@ -744,15 +744,17 @@ namespace cds { namespace container {
           }
 
           queue_t m_internal_queue;
-          size_t m_size;
+          std::atomic<ssize_t> m_active_socket DOUBLE_CACHE_ALIGNED {-1};
+          size_t m_size DOUBLE_CACHE_ALIGNED;
+          size_t m_socket_boundary;
           std::vector<handle_t> m_handlers;
           bool m_queue_done = false;
         public:
           using value_type = T;
           using item_counter = typename Traits::item_counter;
           using gc = cds::gc::nogc;
-          WFQueue(size_t ids)
-              : m_size(ids), m_handlers(ids)
+          WFQueue(size_t ids, ssize_t socket_boundary = -1)
+              : m_size(ids), m_socket_boundary(socket_boundary < 0 ? ids : socket_boundary), m_handlers(ids)
           {
             queue_init(&m_internal_queue, m_size);
             for(size_t i = 0; i < m_size; ++i) {
@@ -772,14 +774,52 @@ namespace cds { namespace container {
               return m_internal_queue.stat;
           }
 
+          static inline uint64_t read_tsc() {
+              unsigned upper, lower;
+              __asm__ __volatile__ ("rdtsc" : "=a"(lower), "=d"(upper));
+              return ((uint64_t)lower)|(((uint64_t)upper)<<32 );
+          }
+
+          size_t get_socket(size_t id) const {
+            if (id < m_socket_boundary) {
+              return 0;
+            } else { 
+              return 1;
+            }
+          }
+
+          void wait_for_socket(size_t id) {
+            ssize_t socket = get_socket(id);
+            ssize_t current = m_active_socket.load(std::memory_order_acquire);
+
+            if(cds_likely(current == socket)) {
+              return;
+            }
+
+            using namespace std::chrono;
+            constexpr microseconds USEC_TIMOUT(50);
+            constexpr uint64_t WAIT_TIMEOUT = (duration_cast<nanoseconds>(USEC_TIMOUT).count() * 22) / 10;
+            uint64_t w = read_tsc() + WAIT_TIMEOUT;
+
+            while (current != -1 && current != socket && read_tsc() < w) {
+              current = m_active_socket.load(std::memory_order_acquire);
+            }
+
+            if(current != socket) {
+              m_active_socket.compare_exchange_strong(current, socket, std::memory_order_acq_rel, std::memory_order_relaxed);
+            }
+          }
+
           bool enqueue(T* val, size_t id)
           {
+              wait_for_socket(id);
               enqueue(&m_internal_queue, &m_handlers[id], val);
               return true;
           }
 
           bool dequeue(T* &dest, size_t tid)
           {
+              wait_for_socket(tid);
               dest = reinterpret_cast<T*>(dequeue(&m_internal_queue, &m_handlers[tid]));
               return static_cast<bool>(dest);
           }
