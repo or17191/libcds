@@ -70,6 +70,7 @@ namespace cds { namespace intrusive {
                 }
                 delay(FINAL_LATENCY);
               }
+              return InsertResult::RETRY;
             }
           }
           __builtin_unreachable();

@@ -38,9 +38,13 @@ namespace cds { namespace container {
             using base_type = intrusive::basket_queue::stat<non_atomic_counter>;
             typename base_type::counter_type m_FalseExtract;    ///< Count the number of times an extract failed
             typename base_type::counter_type m_FreeNode;    ///< Count the number of times an extract failed
+            typename base_type::counter_type m_SameNodeExtract;
+            typename base_type::counter_type m_RetryInsert;
 
             void onFalseExtract()           { ++m_FalseExtract; }
             void onFreeNode()           { ++m_FreeNode; }
+            void onSameNodeExtract() { ++m_SameNodeExtract; }
+            void onRetryInsert() { ++m_RetryInsert; }
 
             base_type& base() { return static_cast<base_type&>(*this); }
             const base_type& base () const { return static_cast<const base_type&>(*this); }
@@ -52,6 +56,8 @@ namespace cds { namespace container {
                 base_type::reset();
                 m_FalseExtract.reset();
                 m_FreeNode.reset();
+                m_SameNodeExtract.reset();
+                m_RetryInsert.reset();
             }
 
             stat& operator +=( stat const& s )
@@ -59,6 +65,8 @@ namespace cds { namespace container {
                 base_type::operator +=(s);
                 m_FalseExtract    += s.m_FalseExtract.get();
                 m_FreeNode    += s.m_FreeNode.get();
+                m_SameNodeExtract += s.m_SameNodeExtract.get();
+                m_RetryInsert += s.m_RetryInsert.get();
                 return *this;
             }
             //@endcond
@@ -70,6 +78,8 @@ namespace cds { namespace container {
             //@cond
             void onFalseExtract()       const {}
             void onFreeNode()       const {}
+            void onSameNodeExtract() const {}
+            void onRetryInsert() const {}
 
             empty_stat& operator +=( empty_stat const& )
             {
@@ -466,7 +476,15 @@ namespace cds { namespace container {
                 marked_ptr pNext{};
                 pNew->m_basket_id = t->m_basket_id + 1;
                 node_ptr->m_bag.unsafe_insert(val, id);
-                const auto res = insert_policy::template _<memory_model>(t, marked_ptr(pNew), pNext, m_ids);
+                typename insert_policy::InsertResult res;
+                do {
+                  res = insert_policy::template _<memory_model>(t, marked_ptr(pNew), pNext, m_ids);
+                  if(res == insert_policy::InsertResult::RETRY) {
+                    tstat.onRetryInsert();
+                  } else {
+                    break;
+                  }
+                } while(true);
 
                 if ( res == insert_policy::InsertResult::SUCCESSFUL_INSERT) {
                     node_ptr.release();
@@ -666,6 +684,13 @@ namespace cds { namespace container {
                 }
 
                 if(pNext.ptr() == nullptr && is_empty(iter)) {
+                    pNext = iter->m_pNext.load(std::memory_order_acquire);
+                    if (pNext.ptr()) {
+                      iter = pNext;
+                      pNext = iter->m_pNext.load(std::memory_order_acquire);
+                      ++hops;
+                      continue;
+                    }
                     if (hops >= m_nMaxHops && advance_node(m_pHead, iter)) {
                       free_chain(id);
                     }
@@ -686,6 +711,10 @@ namespace cds { namespace container {
                       free_chain(id);
                     }
                     res.basket_id = value_node->m_basket_id;
+                    if(res.basket_id == tcache.last_node) {
+                      tstat.onSameNodeExtract();
+                    }
+                    tcache.last_node = res.basket_id;
                     break;
                 } else {
                     if(pNext.ptr() == nullptr) {

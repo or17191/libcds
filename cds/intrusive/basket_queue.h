@@ -222,7 +222,7 @@ namespace cds { namespace intrusive {
           static constexpr size_t latency = LATENCY;
           static constexpr size_t final_latency = FINAL_LATENCY;
 
-          enum class InsertResult : uint8_t { NOT_NULL=0, FAILED_INSERT=1, SUCCESSFUL_INSERT=2 };
+          enum class InsertResult : uint8_t { NOT_NULL=0, FAILED_INSERT=1, SUCCESSFUL_INSERT=2, RETRY=3 };
 
           template <class MemoryModel, class MarkedPtr>
           static InsertResult _(MarkedPtr old_node, MarkedPtr new_node, MarkedPtr& next_value, size_t thread_count = 1) {
