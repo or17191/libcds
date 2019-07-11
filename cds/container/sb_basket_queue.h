@@ -676,19 +676,21 @@ namespace cds { namespace container {
 
             size_t hops = 0;
 
+            auto loop_iteration = [&iter, &pNext, &hops] {
+              iter = pNext;
+              pNext = iter->m_pNext.load(std::memory_order_acquire);
+              ++hops;
+            };
+
             while (true) {
                 while (pNext.ptr() && is_empty(iter)) {
-                    iter = pNext;
-                    pNext = pNext->m_pNext.load(std::memory_order_acquire);
-                    ++hops;
+                  loop_iteration();
                 }
 
                 if(pNext.ptr() == nullptr && is_empty(iter)) {
                     pNext = iter->m_pNext.load(std::memory_order_acquire);
                     if (pNext.ptr()) {
-                      iter = pNext;
-                      pNext = iter->m_pNext.load(std::memory_order_acquire);
-                      ++hops;
+                      loop_iteration();
                       continue;
                     }
                     if (hops >= m_nMaxHops && advance_node(m_pHead, iter)) {
@@ -729,9 +731,7 @@ namespace cds { namespace container {
                       return false;
                     }
                     tstat.onFalseExtract();
-                    iter = pNext;
-                    pNext = iter->m_pNext.load(std::memory_order_acquire);
-                    ++hops;
+                    loop_iteration();
                 }
 
                 if (bDeque)
