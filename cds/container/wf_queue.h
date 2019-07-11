@@ -812,14 +812,14 @@ namespace cds { namespace container {
 
           bool enqueue(T* val, size_t id)
           {
-              wait_for_socket(id);
+              // wait_for_socket(id);
               enqueue(&m_internal_queue, &m_handlers[id], val);
               return true;
           }
 
           bool dequeue(T* &dest, size_t tid)
           {
-              wait_for_socket(tid);
+              // wait_for_socket(tid);
               dest = reinterpret_cast<T*>(dequeue(&m_internal_queue, &m_handlers[tid]));
               return static_cast<bool>(dest);
           }
