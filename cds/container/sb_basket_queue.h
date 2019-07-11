@@ -451,6 +451,7 @@ namespace cds { namespace container {
 
         bool do_enqueue(thread_data &th, T* val, const size_t id)
         {
+            using InsertResult = typename insert_policy::InsertResult;
             auto& tstat = m_nodes_cache[id].stats;
             auto& node_ptr = th.node;
             base_node_type* pNew{nullptr};
@@ -475,20 +476,18 @@ namespace cds { namespace container {
 
                 marked_ptr pNext{};
                 pNew->m_basket_id = t->m_basket_id + 1;
-                node_ptr->m_bag.unsafe_insert(val, id);
-                typename insert_policy::InsertResult res;
-                do {
+                InsertResult res;
+                // do {
                   res = insert_policy::template _<memory_model>(t, marked_ptr(pNew), pNext, m_ids);
-                  if(res == insert_policy::InsertResult::RETRY) {
-                    tstat.onRetryInsert();
-                  } else {
-                    break;
-                  }
-                } while(true);
+                //  if(res == insert_policy::InsertResult::RETRY) {
+                //    tstat.onRetryInsert();
+                //  } else {
+                //    break;
+                //  }
+                // } while(true);
 
-                if ( res == insert_policy::InsertResult::SUCCESSFUL_INSERT) {
+                if ( res == InsertResult::SUCCESSFUL_INSERT) {
                     node_ptr.release();
-                    auto node = node_traits::to_value_ptr(pNew);
                     auto copy_t = t;
                     if (!m_pTail.compare_exchange_strong(copy_t, marked_ptr(pNew), memory_model::memory_order_release, atomics::memory_order_relaxed))
                         tstat.onAdvanceTailFailed();
@@ -499,15 +498,24 @@ namespace cds { namespace container {
                     // };
                     pNew = nullptr; // Need to do this after we update node_ptr
                     //th.last_node = node->m_basket_id;
-                    break;
-                } else if ( res == insert_policy::InsertResult::FAILED_INSERT ) {
+                    auto node = node_traits::to_value_ptr(t.ptr());
+                    // if(cds_unlikely(th.last_node == node->m_basket_id)) {
+                    //   std::stringstream s;
+                    //   s << "Other bag " << std::hex << th.last_node << ' ' << node->m_basket_id << ' ' << id;
+                    //   throw std::logic_error(s.str());
+                    // }
+                    if (cds_likely(node->m_bag.insert(val, id, std::false_type{}))) {
+                        // th.last_node = node->m_basket_id;
+                        break;
+                    }
+                } else if ( res == InsertResult::FAILED_INSERT || res == InsertResult::RETRY ) {
                     node_ptr->m_bag.unsafe_extract(id);
                     // Try adding to basket
                     tstat.onTryAddBasket();
 
                     // add to the basket
                     bkoff();
-                    auto node = node_traits::to_value_ptr(pNext.ptr());
+                    auto node = node_traits::to_value_ptr(t.ptr());
                     // if(cds_unlikely(th.last_node == node->m_basket_id)) {
                     //   std::stringstream s;
                     //   s << "Other bag " << std::hex << th.last_node << ' ' << node->m_basket_id << ' ' << id;
@@ -516,6 +524,22 @@ namespace cds { namespace container {
                     if (cds_likely(node->m_bag.insert(val, id, std::false_type{}))) {
                         tstat.onAddBasket();
                         // th.last_node = node->m_basket_id;
+                        if(res == InsertResult::RETRY) {
+                          pNext = t->m_pNext.load(std::memory_order_acquire);
+                          if(pNext.ptr() == nullptr) {
+                            tstat.onRetryInsert();
+                            do {
+                              res = insert_policy::template _<memory_model>(t, marked_ptr(pNew), pNext, m_ids);
+                              if(res == InsertResult::SUCCESSFUL_INSERT) {
+                                node_ptr.release();
+                                pNew = nullptr;
+                                break;
+                              } else if (res == InsertResult::NOT_NULL || res == InsertResult::FAILED_INSERT) {
+                                break;
+                              }
+                            } while(true);
+                          }
+                        }
                         break;
                     }
                 }
@@ -687,15 +711,7 @@ namespace cds { namespace container {
                   loop_iteration();
                 }
 
-                if(pNext.ptr() == nullptr && is_empty(iter)) {
-                    pNext = iter->m_pNext.load(std::memory_order_acquire);
-                    if (pNext.ptr()) {
-                      loop_iteration();
-                      continue;
-                    }
-                    if (hops >= m_nMaxHops && advance_node(m_pHead, iter)) {
-                      free_chain(id);
-                    }
+                if(pNext.ptr() == nullptr) {
                     tstat.onEmptyDequeue();
                     release(id + m_ids);
                     return false;
@@ -719,17 +735,6 @@ namespace cds { namespace container {
                     tcache.last_node = res.basket_id;
                     break;
                 } else {
-                    if(pNext.ptr() == nullptr) {
-                      pNext = iter->m_pNext.load(std::memory_order_acquire);
-                    }
-                    if(pNext.ptr() == nullptr) {
-                      if (hops >= m_nMaxHops && advance_node(m_pHead, iter)) {
-                        free_chain(id);
-                      }
-                      tstat.onEmptyDequeue();
-                      release(id + m_ids);
-                      return false;
-                    }
                     tstat.onFalseExtract();
                     loop_iteration();
                 }

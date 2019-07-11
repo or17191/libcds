@@ -61,6 +61,7 @@ namespace cds { namespace intrusive {
             const bool is_conflict = (ret & _XABORT_CONFLICT) != 0;
             const bool is_nested = (ret & _XABORT_NESTED) != 0;
             if (is_conflict && is_nested) {
+              return InsertResult::RETRY;
               delay(FINAL_LATENCY);
               for(size_t p = 0; p < PATIENCE; ++ p) {
                 auto value = old.load(std::memory_order_acquire);
@@ -70,7 +71,6 @@ namespace cds { namespace intrusive {
                 }
                 delay(FINAL_LATENCY);
               }
-              return InsertResult::RETRY;
             }
           }
           __builtin_unreachable();
