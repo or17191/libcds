@@ -43,14 +43,12 @@ function test_executable() {
   echo "${tests}"
   if [ $test_name = "stress-queue-push-pop" ]; then
     # Pushers and poppers in different sockets
-    unset PACKED
-    unset SPREAD
-    unset NUMA
+    export FORCE_NUMA=
+    unset NOHT
   else
     # Only one type of thread, both in the same socket
-    export PACKED=
-    unset SPREAD
-    unset NUMA
+    unset FORCE_NUMA
+    unset NOHT
   fi
 
   for n in $tnums; do
@@ -82,9 +80,8 @@ function test_executable() {
     done
   done 
 
-  unset PACKED
-  unset SPREAD
-  unset NUMA
+  unset FORCE_NUMA
+  unset NOHT
 }
 
 test_executable "stress-queue-$1"

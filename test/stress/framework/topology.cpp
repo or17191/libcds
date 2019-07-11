@@ -7,6 +7,7 @@
 #include <stdexcept>
 #include <string>
 #include <algorithm>
+#include <numeric>
 
 #include <sched.h>
 #include <sys/stat.h>
@@ -94,32 +95,41 @@ namespace topology {
 
     void Topology::make_mapping()
     {
-        bool packed = getenv("PACKED") != nullptr;
-        bool spread = getenv("SPREAD") != nullptr;
-        bool numa = getenv("NUMA") != nullptr;
-        if (!packed && !spread) {
-          make_default_mapping();
-          return;
+        bool no_ht = getenv("NOHT") != nullptr;
+        bool force_numa = getenv("FORCE_NUMA") != nullptr;
+        make_mapping(no_ht, force_numa);
+        m_node_info.resize(m_sockets, 0);
+        for(auto& c: m_mapping) {
+          m_node_info[c.socket]++;
         }
-        assert(packed != spread);
-        make_specific_mapping(packed, numa);
     }
 
-    void Topology::make_default_mapping()
+    void Topology::make_mapping(bool no_hyperthreading, bool force_numa)
     {
-        m_sockets = 0;
-        std::size_t populus = 0;
-        // Take the smallest amount of sockets.
-        for (const auto &element : m_info) {
-            m_sockets++;
-            for(auto& e: element.second) {
-              populus += e.second.size();
-            }
-            if (populus >= m_threads_num) {
-                break;
-            }
+        if (force_numa) {
+          m_sockets = m_info.size();
+        } else {
+          m_sockets = 0;
+          std::size_t populus = 0;
+          // Take the smallest amount of sockets.
+          for (const auto &e: m_info) {
+              m_sockets++;
+              if(no_hyperthreading) {
+                populus += e.second.size();
+              } else {
+                for (auto& e2: e.second) {
+                  populus += e2.second.size();
+                }
+              }
+              if (populus >= m_threads_num) {
+                  break;
+              }
+          }
+          if(populus < m_threads_num) {
+            throw std::runtime_error("Not enough threads");
+          }
         }
-        assert(sockets != 0);
+        assert(m_sockets != 0);
         std::size_t step_size = m_threads_num % m_sockets;
         std::size_t common_size = m_threads_num / m_sockets;
         auto per_socket = [&step_size,
@@ -130,13 +140,17 @@ namespace topology {
         auto info_pos = m_info.begin();
         for (std::size_t s = 0; s < m_sockets; ++s, ++info_pos) {
             std::size_t end = per_socket(s);
-            m_node_info.emplace_back(end);
             auto socket_pos = info_pos->second.begin();
             size_t c = 0;
             while(c < end) {
-              for(auto& e: socket_pos->second) {
-                m_mapping.emplace_back(c, info_pos->first, e);
+              if(no_hyperthreading) {
+                m_mapping.emplace_back(c, info_pos->first, *socket_pos->second.begin());
                 ++c;
+              } else {
+                for(auto& e: socket_pos->second) {
+                  m_mapping.emplace_back(c, info_pos->first, e);
+                  ++c;
+                }
               }
               ++socket_pos;
             }
@@ -148,43 +162,6 @@ namespace topology {
         throw std::logic_error("Can't have socket boundary for that many sockets");
       }
       return m_socket_boundary;
-    }
-
-    void Topology::make_specific_mapping(bool packed, bool numa)
-    {
-      m_sockets = numa ? m_info.size() : 1;
-      auto info_pos = m_info.begin();
-      for(size_t s = 0; s < m_sockets; ++s, ++info_pos) {
-        size_t core = 0;
-        auto& socket = info_pos->second;
-        for(auto socket_pos = socket.begin(); socket_pos != socket.end(); ++core, ++socket_pos) {
-          for(auto& physical: socket_pos->second) {
-            m_mapping.emplace_back(core, info_pos->first, physical);
-          }
-        }
-      }
-      m_socket_boundary = m_threads_num / m_sockets;
-      if (m_threads_num > m_mapping.size()) {
-          std::ostringstream err;
-          err << "Too many threads. For this amount of sockets, use " << m_mapping.size() << " threads.";
-          throw std::runtime_error(err.str());
-      }
-      // Sorts by (hypercore, socket, logical_core)
-      std::sort(m_mapping.begin(), m_mapping.end(), [](const core_id& lhs, const core_id& rhs) {
-        return std::less<size_t>{}(lhs.physical, rhs.physical);
-      });
-      if(packed) {
-        // Sorts by (logical core, hypercore, socket)
-        std::stable_sort(m_mapping.begin(), m_mapping.end(), [](const core_id& lhs, const core_id& rhs) {
-          return std::less<size_t>{}(lhs.logical, rhs.logical);
-        });
-      }
-      m_mapping.erase(std::next(m_mapping.begin(), m_threads_num), m_mapping.end());
-      m_node_info.resize(m_sockets);
-      std::fill_n(m_node_info.begin(), m_sockets, 0);
-      for(auto& c: m_mapping) {
-        m_node_info[c.socket]++;
-      }
     }
 
     void Topology::pin_thread(std::size_t thread_num) const

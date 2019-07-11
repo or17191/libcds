@@ -58,8 +58,7 @@ namespace topology {
         };
         static std::vector<CPUInfo> read_cpus();
         void make_mapping();
-        void make_default_mapping();
-        void make_specific_mapping(bool packed, bool numa);
+        void make_mapping(bool no_hyperthreading, bool force_numa);
 
         std::size_t m_threads_num;
         std::size_t m_max_threads;
