@@ -118,13 +118,13 @@ namespace {
 
             virtual void test()
             {
-                s_Topology->pin_thread(id());
+                s_Topology->pin_thread(m_nThreadId);
                 auto start = clock_type::now();
                 m_nPushFailed += push_many(m_Queue, m_nStart, m_nEnd, m_nWriterId, m_values);
                 auto end = clock_type::now();
                 m_Duration = std::chrono::duration_cast<duration_type>(end - start);
                 s_nProducerDone.fetch_add( 1 );
-                s_Topology->verify_pin(id());
+                s_Topology->verify_pin(m_nThreadId);
             }
 
         public:
@@ -133,6 +133,7 @@ namespace {
             size_t const        m_nStart;
             size_t const        m_nEnd;
             size_t              m_nWriterId;
+            size_t              m_nThreadId;
             duration_type       m_Duration;
             typename Queue::value_type*    m_values{};
         };
@@ -149,6 +150,7 @@ namespace {
             size_t              m_nPopped;
             size_t              m_nBadWriter;
             size_t              m_nReaderId;
+            size_t              m_nThreadId;
             duration_type       m_Duration;
 
             typedef std::vector<std::pair<typename Queue::value_type*, size_t>> popped_data;
@@ -202,7 +204,7 @@ namespace {
 
             virtual void test()
             {
-                s_Topology->pin_thread(id());
+                s_Topology->pin_thread(m_nThreadId);
                 m_nPopEmpty = 0;
                 m_nPopped = 0;
                 m_nBadWriter = 0;
@@ -227,7 +229,7 @@ namespace {
                 }
                 auto end = clock_type::now();
                 m_Duration = std::chrono::duration_cast<duration_type>(end - start);
-                s_Topology->verify_pin(id());
+                s_Topology->verify_pin(m_nThreadId);
             }
 
             virtual void TearDown() {
@@ -366,6 +368,21 @@ namespace {
                   producer.m_nWriterId = writer_id++;
                   producer.m_values = ptr;
                   ptr += (producer.m_nEnd - producer.m_nStart);
+              }
+          }
+          size_t tid = 0;
+          for (size_t i = 0; i < pool.size(); ++i) {
+              cds_test::thread& thr = pool.get(i);
+              if ( thr.type() == producer_thread ) {
+                  Producer& producer = static_cast<Producer&>( thr );
+                  producer.m_nThreadId = tid++;
+              }
+          }
+          for (size_t i = 0; i < pool.size(); ++i) {
+              cds_test::thread& thr = pool.get(i);
+              if ( thr.type() == consumer_thread ) {
+                  Consumer& consumer = static_cast<Consumer&>( thr );
+                  consumer.m_nThreadId = tid++;
               }
           }
         }
