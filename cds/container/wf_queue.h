@@ -743,12 +743,12 @@ namespace cds { namespace container {
               th->Dh = th->next;
           }
 
-          queue_t m_internal_queue;
+          queue_t m_internal_queue DOUBLE_CACHE_ALIGNED;
           std::atomic<ssize_t> m_active_socket DOUBLE_CACHE_ALIGNED {-1};
           size_t m_size DOUBLE_CACHE_ALIGNED;
-          size_t m_socket_boundary;
-          std::vector<handle_t> m_handlers;
-          bool m_queue_done = false;
+          size_t m_socket_boundary DOUBLE_CACHE_ALIGNED;
+          std::vector<handle_t> m_handlers DOUBLE_CACHE_ALIGNED;
+          bool m_queue_done  DOUBLE_CACHE_ALIGNED = false;
         public:
           using value_type = T;
           using item_counter = typename Traits::item_counter;
@@ -797,7 +797,7 @@ namespace cds { namespace container {
             }
 
             using namespace std::chrono;
-            constexpr microseconds USEC_TIMOUT(50);
+            constexpr microseconds USEC_TIMOUT(200);
             constexpr uint64_t WAIT_TIMEOUT = (duration_cast<nanoseconds>(USEC_TIMOUT).count() * 22) / 10;
             uint64_t w = read_tsc() + WAIT_TIMEOUT;
 
@@ -812,14 +812,14 @@ namespace cds { namespace container {
 
           bool enqueue(T* val, size_t id)
           {
-              // wait_for_socket(id);
+              //wait_for_socket(id);
               enqueue(&m_internal_queue, &m_handlers[id], val);
               return true;
           }
 
           bool dequeue(T* &dest, size_t tid)
           {
-              // wait_for_socket(tid);
+              //wait_for_socket(tid);
               dest = reinterpret_cast<T*>(dequeue(&m_internal_queue, &m_handlers[tid]));
               return static_cast<bool>(dest);
           }
