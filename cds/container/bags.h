@@ -159,7 +159,8 @@ namespace cds { namespace container {
             static constexpr size_t MAX_THREADS=40;
             std::array<value_type, MAX_THREADS> m_bag;
             TwicePaddedValue<std::atomic<size_t>> counter{0};
-            TwicePaddedValue<std::atomic<bool>> status{0};
+            TwicePaddedValue<std::atomic<bool>> exhaust{false};
+            TwicePaddedValue<std::atomic<bool>> stop_insert{false};
 
         protected:
             const size_t m_size;
@@ -186,8 +187,10 @@ namespace cds { namespace container {
               size_t index;
               ptr_t ptr;
               while((index = counter.value.fetch_add(1, std::memory_order_acq_rel)) < size) {
-                if(index == size - 1) {
-                  status.value.store(true, std::memory_order_seq_cst);
+                if(index == 0) {
+                  stop_insert.value.store(true, std::memory_order_seq_cst);
+                } else if(index == size - 1) {
+                  exhaust.value.store(true, std::memory_order_seq_cst);
                 }
                 ptr = attempt_pop(m_bag[index].value);
                 if(ptr.ptr() != nullptr) {
@@ -198,12 +201,17 @@ namespace cds { namespace container {
               return false;
             }
             template <class First>
-            bool insert(T t, size_t id, First)
-            {
+            bool insert(T t, size_t id, First) {
                 assert(id < m_size);
+                if(cds_unlikely(stop_insert.value.load(std::memory_order_acquire))) {
+                  return false;
+                }
                 auto &v = m_bag[id].value;
                 ptr_t old{nullptr, 0};
                 return v.compare_exchange_strong(old, ptr_t{t}, std::memory_order_acq_rel);
+            }
+            bool empty() const {
+              return exhaust.value.load(std::memory_order_acquire);
             }
             /*
             bool extract(T &t, size_t id) {
@@ -254,9 +262,6 @@ namespace cds { namespace container {
               return false;
             }
             */
-            bool empty() const {
-              return status.value.load(std::memory_order_acquire);
-            }
         };
 
         template <class T>
