@@ -187,10 +187,10 @@ namespace cds { namespace container {
               size_t index;
               ptr_t ptr;
               while((index = counter.value.fetch_add(1, std::memory_order_acq_rel)) < size) {
-                if(index == 0) {
-                  stop_insert.value.store(true, std::memory_order_seq_cst);
-                } else if(index == size - 1) {
-                  exhaust.value.store(true, std::memory_order_seq_cst);
+                if(index == size - 1) {
+                  stop_insert.value.store(true, std::memory_order_relaxed);
+                  exhaust.value.store(true, std::memory_order_relaxed);
+                  std::atomic_thread_fence(std::memory_order_seq_cst);
                 }
                 ptr = attempt_pop(m_bag[index].value);
                 if(ptr.ptr() != nullptr) {
