@@ -550,7 +550,15 @@ namespace {
     template <class Fixture>
     using WFQueue = cds::container::WFQueue<typename Fixture::value_type>;
 
+    struct numa_wf_queue : public cds::container::wf_queue::traits {
+      using numa_balance = std::true_type;
+    };
+
+    template <class Fixture>
+    using NUMAWFQueue = cds::container::WFQueue<typename Fixture::value_type, numa_wf_queue>;
+
     CDSSTRESS_WFQueue_F( simple_sb_queue_push_pop, WFQueue)
+    CDSSTRESS_WFQueue_F( simple_sb_queue_push_pop, NUMAWFQueue)
 
 
     // template <class Fixture>

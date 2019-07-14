@@ -203,6 +203,7 @@ namespace cds { namespace container {
       struct traits {
         using stat_type = empty_stat;
         using item_counter = atomicity::empty_item_counter;
+        using numa_balance = std::false_type;
       };
 
 
@@ -788,7 +789,7 @@ namespace cds { namespace container {
             }
           }
 
-          void wait_for_socket(size_t id) {
+          void wait_for_socket(size_t id, std::true_type) {
             ssize_t socket = get_socket(id);
             ssize_t current = m_active_socket.load(std::memory_order_acquire);
 
@@ -810,16 +811,18 @@ namespace cds { namespace container {
             }
           }
 
+          void wait_for_socket(size_t id, std::false_type) {}
+
           bool enqueue(T* val, size_t id)
           {
-              //wait_for_socket(id);
+              wait_for_socket(id, typename Traits::numa_balance{});
               enqueue(&m_internal_queue, &m_handlers[id], val);
               return true;
           }
 
           bool dequeue(T* &dest, size_t tid)
           {
-              //wait_for_socket(tid);
+              wait_for_socket(tid, typename Traits::numa_balance{});
               dest = reinterpret_cast<T*>(dequeue(&m_internal_queue, &m_handlers[tid]));
               return static_cast<bool>(dest);
           }
