@@ -75,7 +75,7 @@ function test_executable() {
       echo "${test}"
       for i in {1..${N}}; do
         echo "${i}";
-        "${executable}" --gtest_filter="${test}" --gtest_output=xml:"${DIR}/res_${test}_${i}.xml" > "${DIR}/out_${test}_${i}.txt";
+        yes | "${executable}" --gtest_filter="${test}" --gtest_output=xml:"${DIR}/res_${test}_${i}.xml" > "${DIR}/out_${test}_${i}.txt";
       done
     done
   done 
