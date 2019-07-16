@@ -41,18 +41,16 @@ namespace cds { namespace intrusive {
               }
               old.store(new_node, std::memory_order_relaxed);
               _xend();
-            }
-            if (ret == _XBEGIN_STARTED) {
               return InsertResult::SUCCESSFUL_INSERT;
+            }
+            if (ret == 0) {
+              // Relatively uncommon
+              continue;
             }
             if ((ret & _XABORT_EXPLICIT) != 0) {
               assert(_XABORT_CODE(ret) == 0x01);
               new_value = old.load(std::memory_order_acquire);
               return InsertResult::FAILED_INSERT;
-            }
-            if (ret == 0) {
-              // Relatively uncommon
-              continue;
             }
             const bool is_conflict = (ret & _XABORT_CONFLICT) != 0;
             const bool is_nested = (ret & _XABORT_NESTED) != 0;
