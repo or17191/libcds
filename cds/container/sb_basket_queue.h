@@ -476,21 +476,27 @@ namespace cds { namespace container {
 
                 marked_ptr pNext{};
                 pNew->m_basket_id = t->m_basket_id + 1;
+                pNew->m_pNext.store(marked_ptr{}, std::memory_order_relaxed);
                 node_ptr->m_bag.unsafe_insert(val, id);
                 typename insert_policy::InsertResult res;
                 int i = 0;
-                do {
-                  res = insert_policy::template _<memory_model>(t, marked_ptr(pNew), pNext, m_ids);
-                  if(res == InsertResult::RETRY) {
-                    tstat.onRetryInsert();
-                  } else {
-                    if( i > 0 && res == InsertResult::NOT_NULL) {
-                      res = InsertResult::FAILED_INSERT;
+                pNext = pNew->m_pNext.load(std::memory_order_acquire);
+                if(pNext.ptr() != nullptr) {
+                  res =  InsertResult::NOT_NULL;
+                } else {
+                  do {
+                    res = insert_policy::template _<memory_model>(t, marked_ptr(pNew), pNext, m_ids);
+                    if(res == InsertResult::RETRY) {
+                      tstat.onRetryInsert();
+                    } else {
+                      if( i > 0 && res == InsertResult::NOT_NULL) {
+                        res = InsertResult::FAILED_INSERT;
+                      }
+                      break;
                     }
-                    break;
-                  }
-                  ++i;
-                } while(true);
+                    ++i;
+                  } while(true);
+                }
 
                 if ( res == InsertResult::SUCCESSFUL_INSERT) {
                     node_ptr.release();

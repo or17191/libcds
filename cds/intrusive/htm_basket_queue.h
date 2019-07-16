@@ -22,17 +22,12 @@ namespace cds { namespace intrusive {
         static constexpr bool IS_HTM = true;
         static constexpr size_t latency = LATENCY;
         static constexpr size_t final_latency = FINAL_LATENCY;
+
         template <class MemoryModel, class MarkedPtr, class CheckNext = std::true_type>
         static InsertResult _(MarkedPtr old_node, MarkedPtr new_node, MarkedPtr& new_value, size_t thread_count = 1, CheckNext = {}) {
-          new_node->m_pNext.store(MarkedPtr{}, std::memory_order_relaxed);
           auto& old = old_node->m_pNext;
           int ret;
-          const size_t latency = thread_count * LATENCY;
-          MarkedPtr pNext = old.load(std::memory_order_acquire);
-          if(pNext.ptr() != nullptr) {
-            new_value = pNext;
-            return InsertResult::NOT_NULL;
-          }
+          MarkedPtr pNext;
           while(true) {
             if ((ret = _xbegin()) == _XBEGIN_STARTED) {
               if(_xbegin() == _XBEGIN_STARTED) {
@@ -40,6 +35,7 @@ namespace cds { namespace intrusive {
                 if (pNext.ptr() != nullptr) {
                   _xabort(0x01);
                 }
+                const size_t latency = thread_count * LATENCY;
                 delay(latency);
                 _xend();
               }
