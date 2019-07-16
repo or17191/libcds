@@ -62,13 +62,10 @@ namespace cds { namespace intrusive {
             const bool is_nested = (ret & _XABORT_NESTED) != 0;
             if (is_conflict && is_nested) {
               delay(FINAL_LATENCY);
-              for(size_t p = 0; p < PATIENCE; ++ p) {
-                auto value = old.load(std::memory_order_acquire);
-                if(value.ptr() != nullptr) {
-                  new_value = value;
-                  return InsertResult::FAILED_INSERT;
-                }
-                delay(FINAL_LATENCY);
+              auto value = old.load(std::memory_order_acquire);
+              if(value.ptr() != nullptr) {
+                new_value = value;
+                return InsertResult::FAILED_INSERT;
               }
               return InsertResult::RETRY;
             }

@@ -451,6 +451,7 @@ namespace cds { namespace container {
 
         bool do_enqueue(thread_data &th, T* val, const size_t id)
         {
+            using InsertResult = typename insert_policy::InsertResult;
             auto& tstat = m_nodes_cache[id].stats;
             auto& node_ptr = th.node;
             base_node_type* pNew{nullptr};
@@ -477,16 +478,21 @@ namespace cds { namespace container {
                 pNew->m_basket_id = t->m_basket_id + 1;
                 node_ptr->m_bag.unsafe_insert(val, id);
                 typename insert_policy::InsertResult res;
+                int i = 0;
                 do {
                   res = insert_policy::template _<memory_model>(t, marked_ptr(pNew), pNext, m_ids);
-                  if(res == insert_policy::InsertResult::RETRY) {
+                  if(res == InsertResult::RETRY) {
                     tstat.onRetryInsert();
                   } else {
+                    if( i > 0 && res == InsertResult::NOT_NULL) {
+                      res = InsertResult::FAILED_INSERT;
+                    }
                     break;
                   }
+                  ++i;
                 } while(true);
 
-                if ( res == insert_policy::InsertResult::SUCCESSFUL_INSERT) {
+                if ( res == InsertResult::SUCCESSFUL_INSERT) {
                     node_ptr.release();
                     auto node = node_traits::to_value_ptr(pNew);
                     auto copy_t = t;

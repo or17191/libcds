@@ -160,7 +160,6 @@ namespace cds { namespace container {
             std::array<value_type, MAX_THREADS> m_bag;
             TwicePaddedValue<std::atomic<size_t>> counter{0};
             TwicePaddedValue<std::atomic<bool>> exhaust{false};
-            TwicePaddedValue<std::atomic<bool>> stop_insert{false};
 
         protected:
             const size_t m_size;
@@ -188,7 +187,6 @@ namespace cds { namespace container {
               ptr_t ptr;
               while((index = counter.value.fetch_add(1, std::memory_order_acq_rel)) < size) {
                 if(index == size - 1) {
-                  stop_insert.value.store(true, std::memory_order_relaxed);
                   exhaust.value.store(true, std::memory_order_relaxed);
                   std::atomic_thread_fence(std::memory_order_seq_cst);
                 }
@@ -203,9 +201,6 @@ namespace cds { namespace container {
             template <class First>
             bool insert(T t, size_t id, First) {
                 assert(id < m_size);
-                if(cds_unlikely(stop_insert.value.load(std::memory_order_acquire))) {
-                  return false;
-                }
                 auto &v = m_bag[id].value;
                 ptr_t old{nullptr, 0};
                 return v.compare_exchange_strong(old, ptr_t{t}, std::memory_order_acq_rel);
