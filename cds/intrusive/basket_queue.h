@@ -211,7 +211,10 @@ namespace cds { namespace intrusive {
         };
 
         /// Atomics based insert policy
-        template <size_t LATENCY = 10, size_t FINAL_LATENCY=50>
+
+        template <size_t C> struct Constant { size_t operator()(size_t) const { return C; } };
+        template <int A=1, int B=0> struct Linear { size_t operator()(size_t x) const { return A * x + B; } };
+        template<class Latency = Linear<10>>
         struct atomics_insert {
           static inline void delay(size_t s) {
             volatile int x;
@@ -220,13 +223,15 @@ namespace cds { namespace intrusive {
             }
           }
 
-          static constexpr size_t latency = LATENCY;
-          static constexpr size_t final_latency = FINAL_LATENCY;
+          size_t m_latency;
+
+          atomics_insert(size_t threads=1) :
+               m_latency(Latency{}(threads)) {}
 
           enum class InsertResult : uint8_t { NOT_NULL=0, FAILED_INSERT=1, SUCCESSFUL_INSERT=2, RETRY=3 };
 
           template <class MemoryModel, class MarkedPtr>
-          static InsertResult _(MarkedPtr old_node, MarkedPtr new_node, MarkedPtr& next_value, size_t thread_count = 1) {
+          InsertResult _(MarkedPtr old_node, MarkedPtr new_node, MarkedPtr& next_value) const {
             new_node->m_pNext.store(MarkedPtr{}, MemoryModel::memory_order_relaxed);
             auto& old = old_node->m_pNext;
             MarkedPtr pNext = old.load(MemoryModel::memory_order_acquire);
@@ -234,7 +239,7 @@ namespace cds { namespace intrusive {
               next_value = pNext;
               return InsertResult::NOT_NULL;
             }
-            delay(LATENCY * thread_count);
+            delay(m_latency);
             bool res = old.compare_exchange_strong(pNext, new_node, MemoryModel::memory_order_release, MemoryModel::memory_order_relaxed);
             if (!res) {
               next_value = pNext;
@@ -242,14 +247,6 @@ namespace cds { namespace intrusive {
             } else {
               return InsertResult::SUCCESSFUL_INSERT;
             }
-          }
-          template <class MemoryModel, class MarkedPtr>
-          static InsertResult _(MarkedPtr old_node, MarkedPtr new_node, MarkedPtr& next_value, size_t thread_count, std::false_type) {
-            return _<MemoryModel>(std::move(old_node), std::move(new_node), next_value, thread_count);
-          }
-          template <class MemoryModel, class MarkedPtr>
-          static InsertResult _(MarkedPtr old_node, MarkedPtr new_node, MarkedPtr& next_value, size_t thread_count, std::true_type) {
-            return InsertResult::NOT_NULL;
           }
         };
 
@@ -514,6 +511,7 @@ namespace cds { namespace intrusive {
         //@cond
         size_t const        m_nMaxHops;
         size_t              m_nThreads = 1;
+        typename traits::insert_policy m_insert_policy;
         //@endcond
 
         //@cond
@@ -647,6 +645,7 @@ namespace cds { namespace intrusive {
             : m_pHead( &m_Dummy )
             , m_pTail( &m_Dummy )
             , m_nMaxHops( 3 )
+            , m_insert_policy(0)
         {}
 
         /// Destructor clears the queue
@@ -681,6 +680,7 @@ namespace cds { namespace intrusive {
 
         void set_threads(size_t s) {
           m_nThreads = s;
+          m_insert_policy = typename traits::insert_policy{m_nThreads};
         }
 
         /// Enqueues \p val value into the queue.
@@ -702,7 +702,7 @@ namespace cds { namespace intrusive {
                 pNew->m_basket_id = my_uuid;
                 t = guard.protect( m_pTail, []( marked_ptr p ) -> value_type * { return node_traits::to_value_ptr( p.ptr());});
 
-                auto res = insert_policy::template _<memory_model>(t, marked_ptr(pNew), pNext, m_nThreads);
+                auto res = m_insert_policy.template _<memory_model>(t, marked_ptr(pNew), pNext);
 
                 if ( res != insert_policy::InsertResult::NOT_NULL ) {
                     if (res == insert_policy::InsertResult::SUCCESSFUL_INSERT) {

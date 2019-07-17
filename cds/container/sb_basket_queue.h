@@ -238,6 +238,7 @@ namespace cds { namespace container {
         stat m_Stat;                ///< Internal statistics
         size_t const m_nMaxHops = 3;
         size_t const m_ids;
+        const typename traits::insert_policy m_insert_policy;
         //@endcond
 
     protected:
@@ -285,7 +286,7 @@ namespace cds { namespace container {
     public:
         /// Initializes empty queue
         SBBasketQueue(size_t ids)
-            : m_Dummy(ids), m_ids(ids),
+            : m_Dummy(ids), m_ids(ids), m_insert_policy(ids),
               m_nodes_cache(new thread_data[2 * m_ids]()),
               m_thread_hazard(ids * 2)
         {
@@ -485,7 +486,7 @@ namespace cds { namespace container {
                   res =  InsertResult::NOT_NULL;
                 } else {
                   do {
-                    res = insert_policy::template _<memory_model>(t, marked_ptr(pNew), pNext, m_ids);
+                    res = m_insert_policy.template _<memory_model>(t, marked_ptr(pNew), pNext);
                     if(res == InsertResult::RETRY) {
                       tstat.onRetryInsert();
                     } else {

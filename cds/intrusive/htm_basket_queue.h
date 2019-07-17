@@ -17,14 +17,22 @@ namespace cds { namespace intrusive {
 
     namespace htm_basket_queue {
 
-      template<size_t LATENCY=10, size_t FINAL_LATENCY=50, size_t PATIENCE=10>
+      using basket_queue::Linear;
+      using basket_queue::Constant;
+
+      template<class Latency=Linear<10>, class FinalLatency=Constant<30>>
       struct htm_insert : basket_queue::atomics_insert<> {
         static constexpr bool IS_HTM = true;
-        static constexpr size_t latency = LATENCY;
-        static constexpr size_t final_latency = FINAL_LATENCY;
 
-        template <class MemoryModel, class MarkedPtr, class CheckNext = std::true_type>
-        static InsertResult _(MarkedPtr old_node, MarkedPtr new_node, MarkedPtr& new_value, size_t thread_count = 1, CheckNext = {}) {
+        size_t m_latency;
+        size_t m_final_latency;
+
+        htm_insert(size_t threads=1) :
+             m_latency(Latency{}(threads)),
+             m_final_latency(FinalLatency{}(threads)) {}
+
+        template <class MemoryModel, class MarkedPtr>
+        InsertResult _(MarkedPtr old_node, MarkedPtr new_node, MarkedPtr& new_value) const {
           auto& old = old_node->m_pNext;
           int ret;
           MarkedPtr pNext;
@@ -35,8 +43,7 @@ namespace cds { namespace intrusive {
                 if (pNext.ptr() != nullptr) {
                   _xabort(0x01);
                 }
-                const size_t latency = thread_count * LATENCY;
-                delay(latency);
+                delay(m_latency);
                 _xend();
               }
               old.store(new_node, std::memory_order_relaxed);
@@ -55,7 +62,7 @@ namespace cds { namespace intrusive {
             const bool is_conflict = (ret & _XABORT_CONFLICT) != 0;
             const bool is_nested = (ret & _XABORT_NESTED) != 0;
             if (is_conflict && is_nested) {
-              delay(FINAL_LATENCY);
+              delay(m_final_latency);
               auto value = old.load(std::memory_order_acquire);
               if(value.ptr() != nullptr) {
                 new_value = value;

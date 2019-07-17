@@ -593,11 +593,14 @@ namespace {
       typedef cds::intrusive::htm_basket_queue::htm_insert<> insert_policy;
     };
 
+    using cds::intrusive::htm_basket_queue::Linear;
+    using cds::intrusive::htm_basket_queue::Constant;
+
     struct htm_id_traits : cds::container::sb_basket_queue::traits {
-      typedef cds::intrusive::htm_basket_queue::htm_insert<25, 20, 5> insert_policy;
+      typedef cds::intrusive::htm_basket_queue::htm_insert<Linear<17, 40>, Constant<30>> insert_policy;
     };
     struct htm_mod_id_traits : cds::container::sb_basket_queue::traits {
-      typedef cds::intrusive::htm_basket_queue::htm_insert<10, 20, 5> insert_policy;
+      typedef cds::intrusive::htm_basket_queue::htm_insert<Linear<10>, Constant<20>> insert_policy;
     };
 
     /*
