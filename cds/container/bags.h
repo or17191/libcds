@@ -285,6 +285,102 @@ namespace cds { namespace container {
 
         };
 
+        template <class T>
+        class RandomIdBag
+        {
+        private:
+            static_assert(std::is_pointer<T>::value, "");
+            using ptr_t = cds::details::marked_ptr<typename std::remove_pointer<T>::type, 1>;
+            using atomic_ptr_t = std::atomic<ptr_t>;
+
+            using value_type = PaddedValue<atomic_ptr_t>;
+            static constexpr size_t MAX_THREADS=40;
+            std::array<value_type, MAX_THREADS> m_bag;
+            TwicePaddedValue<std::atomic<size_t>> counter{0};
+            TwicePaddedValue<std::atomic<bool>> exhaust{false};
+
+        protected:
+            const size_t m_size;
+
+        public:
+            static constexpr const size_t c_nHazardPtrCount = 0; ///< Count of hazard pointer required for the algorithm
+            RandomIdBag(size_t ids) : m_size(ids)
+            {
+                assert(m_size <= MAX_THREADS);
+            }
+            void unsafe_insert(T t, size_t id) {
+              auto& v = m_bag[id].value;
+              v.store(ptr_t{t}, std::memory_order_relaxed);
+            }
+            void unsafe_extract(size_t id) {
+              auto& v = m_bag[id].value;
+              v.store(ptr_t{nullptr, 0}, std::memory_order_relaxed);
+            }
+            static ptr_t attempt_pop(atomic_ptr_t& v) {
+              ptr_t empty{nullptr, 1};
+              ptr_t value = v.load(std::memory_order_acquire);
+              if(value == empty) {
+                return empty;
+              }
+              return v.exchange(empty, std::memory_order_acq_rel);
+            }
+            static size_t seed() {
+              return std::random_device{}();
+            }
+            bool extract(T &t, size_t) {
+              thread_local std::minstd_rand rnd(seed());
+              size_t size = m_size;
+              std::uniform_int_distribution<> dist(0, size - 1);
+              size_t index;
+              ptr_t ptr;
+              for(size_t i = 0; i < 3; ++i) {
+                index = dist(rnd);
+                ptr = attempt_pop(m_bag[index].value);
+                if (ptr.ptr() != nullptr) {
+                  t = ptr.ptr();
+                  return true;
+                }
+              }
+              if(empty()) {
+                return false;
+              }
+              size >>= 1;
+              for(index = 0; index < size; ++index) {
+                ptr = attempt_pop(m_bag[index].value);
+                if(ptr.ptr() != nullptr) {
+                  t = ptr.ptr();
+                  return true;
+                }
+              }
+              if(empty()) {
+                return false;
+              }
+              for(; index < size << 1; ++index) {
+                ptr = attempt_pop(m_bag[index].value);
+                if(ptr.ptr() != nullptr) {
+                  t = ptr.ptr();
+                  return true;
+                }
+              }
+              if(empty()) {
+                return false;
+              }
+              exhaust.value.store(true, std::memory_order_relaxed);
+              std::atomic_thread_fence(std::memory_order_seq_cst);
+              return false;
+            }
+            template <class First>
+            bool insert(T t, size_t id, First) {
+                assert(id < m_size);
+                auto &v = m_bag[id].value;
+                ptr_t old{nullptr, 0};
+                return v.compare_exchange_strong(old, ptr_t{t}, std::memory_order_acq_rel);
+            }
+            bool empty() const {
+              return exhaust.value.load(std::memory_order_acquire);
+            }
+        };
+
         /*
         template <class T>
         class StackBag
