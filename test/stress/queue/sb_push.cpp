@@ -273,19 +273,27 @@ namespace {
     using value_type = std::pair<intmax_t, intmax_t>;
     using gc_type = cds::gc::HP;
 
+    using cds::intrusive::htm_basket_queue::Linear;
+    using cds::intrusive::htm_basket_queue::Constant;
+
     //using SBSimpleBasketQueue_HP = cds::container::SBBasketQueue<gc_type, value_type, SimpleBag>;
-    using SBIdBasketQueue_HP = cds::container::SBBasketQueue<gc_type, value_type, IdBag>;
+    struct cas_id_traits : cds::container::sb_basket_queue::traits {
+      typedef cds::intrusive::basket_queue::atomics_insert<Constant<350>> insert_policy;
+      //typedef cds::intrusive::basket_queue::atomics_insert<Constant<720>> insert_policy;
+      //typedef cds::intrusive::basket_queue::atomics_insert<Constant<440>> insert_policy;
+    };
+    using SBIdBasketQueue_HP = cds::container::SBBasketQueue<gc_type, value_type, IdBag, cas_id_traits>;
     //using SBStackBasketQueue_HP = cds::container::SBBasketQueue<gc_type, value_type, StackBag>;
 
     struct htm_traits : cds::container::sb_basket_queue::traits {
       typedef cds::intrusive::htm_basket_queue::htm_insert<> insert_policy;
     };
 
-    using cds::intrusive::htm_basket_queue::Linear;
-    using cds::intrusive::htm_basket_queue::Constant;
-
     struct htm_id_traits : cds::container::sb_basket_queue::traits {
-      typedef cds::intrusive::htm_basket_queue::htm_insert<Linear<10, 40>, Constant<30>> insert_policy;
+      typedef cds::intrusive::htm_basket_queue::htm_insert<Constant<350>, Constant<30>> insert_policy;
+      //typedef cds::intrusive::htm_basket_queue::htm_insert<Constant<720>, Constant<30>> insert_policy;
+      //typedef cds::intrusive::htm_basket_queue::htm_insert<Constant<440>, Constant<30>> insert_policy;
+      //typedef cds::intrusive::htm_basket_queue::htm_insert<Linear<10, 40>, Constant<30>> insert_policy;
     };
     struct htm_id_stat_traits : public htm_id_traits
     {

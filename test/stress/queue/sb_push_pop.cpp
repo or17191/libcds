@@ -629,6 +629,10 @@ namespace {
     CDSSTRESS_Queue_F( simple_sb_queue_push_pop, HTMSBIdBasketQueue_HP)
     CDSSTRESS_Queue_F( simple_sb_queue_push_pop, HTMSBHalfIdBasketQueue_HP)
 
+    template <class Fixture>
+    using HTMSBRandomIdBasketQueue_HP = cds::container::SBBasketQueue<typename Fixture::gc_type, typename Fixture::value_type, RandomIdBag, htm_id_traits>;
+    CDSSTRESS_Queue_F( simple_sb_queue_push_pop, HTMSBRandomIdBasketQueue_HP)
+
     struct htm_id_stat_traits : public htm_id_traits
     {
         typedef cds::container::sb_basket_queue::stat<> stat;
