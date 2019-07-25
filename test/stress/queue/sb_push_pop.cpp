@@ -60,6 +60,19 @@ namespace {
       return failed;
     }
 
+    template<class Queue, class Value>
+    static bool pop(Queue& queue, Value&& value, size_t id, cds::uuid_type& basket, std::true_type,
+        decltype(std::declval<Queue>().dequeue(std::forward<Value>(value), id))* = nullptr) {
+      return queue.dequeue(std::forward<Value>(value), id, std::addressof(basket));
+    }
+
+    template<class Queue, class Value>
+    static bool pop(Queue& queue, Value&& value, size_t id, cds::uuid_type& basket, std::false_type,
+        decltype(std::declval<Queue>().dequeue(std::forward<Value>(value), id))* = nullptr) {
+      basket = 0;
+      return queue.dequeue(std::forward<Value>(value), id);
+    }
+
     template <class Value>
     void push_many_setup(const size_t first, const size_t last, const size_t producer,
         Value* values) {
@@ -194,15 +207,6 @@ namespace {
                 return new Consumer( *this );
             }
 
-            bool pop(value_type*& value, size_t tid, cds::uuid_type& basket, std::true_type) {
-              return m_Queue.pop(value, tid, std::addressof(basket));
-            }
-
-            bool pop(value_type*& value, size_t tid, cds::uuid_type& basket, std::false_type) {
-              basket = 0;
-              return m_Queue.pop(value, tid);
-            }
-
             virtual void test()
             {
                 s_Topology->pin_thread(m_nThreadId);
@@ -215,10 +219,13 @@ namespace {
                 size_t basket;
                 auto start = clock_type::now();
                 while ( true ) {
-                    if (pop(v, m_nReaderId, basket, HasBasket{})) {
+                    if (pop(m_Queue, v, m_nReaderId, basket, HasBasket{})) {
                         ++m_nPopped;
                         // TODO bad writer
                         m_WriterData.emplace_back(v, basket);
+                        if(m_nPopped >= m_nPushPerProducer) {
+                          break;
+                        }
                     }
                     else {
                         ++m_nPopEmpty;
@@ -272,11 +279,22 @@ namespace {
             typedef Producer<Queue> producer_type;
 
             size_t nPostTestPops = 0;
+            typename consumer_type::popped_data post_pops;
+            post_pops.reserve(s_nPreStoreSize);
             {
                 value_type* v;
-                while ( q.pop( v, 0))
+                cds::uuid_type basket;
+                while ( pop(q, v, 0, basket, HasBaskets{})) {
                     ++nPostTestPops;
+                    post_pops.emplace_back(v, basket);
+                }
+                std::stable_sort(post_pops.begin(), post_pops.end(), writer_compare{});
+                auto pos = std::lower_bound(post_pops.begin(), post_pops.end(),
+                    s_nProducerThreadCount, writer_compare{});
+                auto post_bad_writer = std::distance(pos, post_pops.end());
+                EXPECT_EQ(post_bad_writer, 0);
             }
+            EXPECT_EQ(post_pops.size(), s_nPreStoreSize);
 
             size_t nTotalPops = 0;
             size_t nPopFalse = 0;
@@ -308,7 +326,7 @@ namespace {
 
             propout() << std::make_pair("empty_pops", nPopFalse);
 
-            EXPECT_EQ( nTotalPops + nPostTestPops, s_nQueueSize ) << "nTotalPops=" << nTotalPops << ", nPostTestPops=" << nPostTestPops;
+            EXPECT_EQ( nTotalPops + nPostTestPops, s_nQueueSize + s_nPreStoreSize) << "nTotalPops=" << nTotalPops << ", nPostTestPops=" << nPostTestPops;
             value_type* v;
             EXPECT_FALSE( q.pop(v, 0));
 
@@ -336,6 +354,25 @@ namespace {
                         baskets.push_back( it->second );
                     }
                 }
+                {
+                  auto rng = std::equal_range(post_pops.begin(), post_pops.end(), nWriter,
+                      writer_compare{});
+                  auto it = rng.first;
+                  auto itEnd = rng.second;
+                  if ( it != itEnd ) {
+                      auto itPrev = it;
+                      ASSERT_EQ(nWriter, it->first->nWriterNo);
+                      for ( ++it; it != itEnd; ++it ) {
+                          ASSERT_LT( itPrev->first->nNo, it->first->nNo + nRightOffset ) << ", producer=" << nWriter;
+                          itPrev = it;
+                      }
+                  }
+
+                  for ( it = rng.first; it != rng.second; ++it ) {
+                      arrData.push_back( it->first->nNo );
+                      baskets.push_back( it->second );
+                  }
+                }
 
                 std::sort( arrData.begin(), arrData.end());
                 for ( size_t i=1; i < arrData.size(); ++i ) {
@@ -343,7 +380,7 @@ namespace {
                 }
 
                 EXPECT_EQ( arrData[0], 0u ) << "producer=" << nWriter;
-                EXPECT_EQ( arrData[arrData.size() - 1], s_nThreadPushCount - 1 ) << "producer=" << nWriter;
+                EXPECT_EQ( arrData[arrData.size() - 1], s_nThreadPushCount + s_nThreadPreStoreSize - 1 ) << "producer=" << nWriter;
             }
 
             check_baskets(baskets.begin(), baskets.end(), HasBaskets{});
@@ -411,7 +448,7 @@ namespace {
               pool.run();
               pool.reset();
             }
-            pool.add( new producer_type( pool, q, s_nThreadPreStoreSize, s_nThreadPushCount), s_nProducerThreadCount );
+            pool.add( new producer_type( pool, q, s_nThreadPreStoreSize, s_nThreadPushCount + s_nThreadPreStoreSize), s_nProducerThreadCount );
             pool.add( new consumer_type( pool, q, s_nThreadPushCount ), s_nConsumerThreadCount );
             setup_pool_ids<producer_type, consumer_type>(pool, independent_ids, values);
             s_nPreStoreDone = true;
@@ -448,7 +485,7 @@ namespace {
             auto ns_reader_duration = std::chrono::duration_cast<std::chrono::nanoseconds>(reader_duration);
             auto ns_writer_duration = std::chrono::duration_cast<std::chrono::nanoseconds>(writer_duration);
             double ns_reader_throughput = double(ns_reader_duration.count()) / (s_nQueueSize);
-            double ns_writer_throughput = double(ns_writer_duration.count()) / (s_nQueueSize - s_nPreStoreSize);
+            double ns_writer_throughput = double(ns_writer_duration.count()) / (s_nQueueSize);
 
             propout() << std::make_pair( "reader_throughput_nsop", ns_reader_throughput );
             propout() << std::make_pair( "writer_throughput_nsop", ns_writer_throughput );
@@ -460,7 +497,7 @@ namespace {
         template <class Queue, class HasBaskets>
         void test( Queue& q, bool independent_ids, bool sequential_pre_store, HasBaskets hb)
         {
-            cds::details::memkind_vector<typename Queue::value_type> values(s_nQueueSize);
+            cds::details::memkind_vector<typename Queue::value_type> values(s_nQueueSize + s_nPreStoreSize);
             test_queue( q , values.data(), independent_ids, sequential_pre_store, hb);
             analyze( q , hb);
             propout() << q.statistics();
