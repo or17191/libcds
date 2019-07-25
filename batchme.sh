@@ -57,7 +57,7 @@ function test_executable() {
         continue;
       fi
     else
-      if [ $n -ge 44 ]; then
+      if [ $n -gt 44 ]; then
         continue;
       fi
     fi

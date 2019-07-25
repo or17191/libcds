@@ -8,9 +8,9 @@
 
 #include <memory>
 
-#include <cds/container/basket_queue.h>
 #include <cds/container/details/base.h>
 #include <cds/intrusive/basket_queue.h>
+#include <cds/details/memkind_allocator.h>
 #include <cds/sync/htm.h>
 
 namespace cds { namespace container {
@@ -19,6 +19,102 @@ namespace cds { namespace container {
     /** @ingroup cds_nonintrusive_helper
     */
     namespace sb_basket_queue {
+
+        /// Atomics based insert policy
+
+        template <size_t C> struct Constant { size_t operator()(size_t) const { return C; } };
+        template <int A=1, int B=0> struct Linear { size_t operator()(size_t x) const { return A * x + B; } };
+        template<class Latency = Linear<10>>
+        struct atomics_insert {
+          static inline void delay(size_t s) {
+            volatile int x;
+            for(size_t i = 0; i < s; ++i) {
+              x = 0;
+            }
+          }
+
+          size_t m_latency;
+
+          atomics_insert(size_t threads=1) :
+               m_latency(Latency{}(threads)) {}
+
+          enum class InsertResult : uint8_t { NOT_NULL=0, FAILED_INSERT=1, SUCCESSFUL_INSERT=2, RETRY=3 };
+
+          template <class MemoryModel, class MarkedPtr>
+          InsertResult _(MarkedPtr old_node, MarkedPtr new_node, MarkedPtr& next_value) const {
+            new_node->m_pNext.store(MarkedPtr{}, MemoryModel::memory_order_relaxed);
+            auto& old = old_node->m_pNext;
+            MarkedPtr pNext = old.load(MemoryModel::memory_order_acquire);
+            if (pNext.ptr() != nullptr) {
+              next_value = pNext;
+              return InsertResult::NOT_NULL;
+            }
+            delay(m_latency);
+            bool res = old.compare_exchange_strong(pNext, new_node, MemoryModel::memory_order_release, MemoryModel::memory_order_relaxed);
+            if (!res) {
+              next_value = pNext;
+              return InsertResult::FAILED_INSERT;
+            } else {
+              return InsertResult::SUCCESSFUL_INSERT;
+            }
+          }
+        };
+
+        template<class Latency=Linear<10>, class FinalLatency=Constant<30>>
+        struct htm_insert : atomics_insert<> {
+          static constexpr bool IS_HTM = true;
+
+          size_t m_latency;
+          size_t m_final_latency;
+
+          htm_insert(size_t threads=1) :
+               m_latency(Latency{}(threads)),
+               m_final_latency(FinalLatency{}(threads)) {}
+
+          template <class MemoryModel, class MarkedPtr>
+          InsertResult _(MarkedPtr old_node, MarkedPtr new_node, MarkedPtr& new_value) const {
+            auto& old = old_node->m_pNext;
+            int ret;
+            MarkedPtr pNext;
+            while(true) {
+              if ((ret = _xbegin()) == _XBEGIN_STARTED) {
+                if(_xbegin() == _XBEGIN_STARTED) {
+                  pNext = old.load(std::memory_order_relaxed);
+                  if (pNext.ptr() != nullptr) {
+                    _xabort(0x01);
+                  }
+                  delay(m_latency);
+                  _xend();
+                }
+                old.store(new_node, std::memory_order_relaxed);
+                _xend();
+                return InsertResult::SUCCESSFUL_INSERT;
+              }
+              if (ret == 0) {
+                // Relatively uncommon
+                continue;
+              }
+              if ((ret & _XABORT_EXPLICIT) != 0) {
+                assert(_XABORT_CODE(ret) == 0x01);
+                new_value = old.load(std::memory_order_acquire);
+                return InsertResult::FAILED_INSERT;
+              }
+              const bool is_conflict = (ret & _XABORT_CONFLICT) != 0;
+              const bool is_nested = (ret & _XABORT_NESTED) != 0;
+              if (is_conflict && is_nested) {
+                delay(m_final_latency);
+                auto value = old.load(std::memory_order_acquire);
+                if(value.ptr() != nullptr) {
+                  new_value = value;
+                  return InsertResult::FAILED_INSERT;
+                }
+                return InsertResult::RETRY;
+              }
+            }
+            __builtin_unreachable();
+          }
+        };
+
         class non_atomic_counter {
           public:
             non_atomic_counter() = default;
@@ -33,9 +129,9 @@ namespace cds { namespace container {
             size_t m_inner{0};
         };
         template <typename Counter = non_atomic_counter >
-        struct stat : public intrusive::basket_queue::stat<non_atomic_counter>
+        struct stat : public intrusive::basket_queue::stat<Counter>
         {
-            using base_type = intrusive::basket_queue::stat<non_atomic_counter>;
+            using base_type = intrusive::basket_queue::stat<Counter>;
             typename base_type::counter_type m_FalseExtract;    ///< Count the number of times an extract failed
             typename base_type::counter_type m_FreeNode;    ///< Count the number of times an extract failed
             typename base_type::counter_type m_SameNodeExtract;
@@ -94,6 +190,8 @@ namespace cds { namespace container {
             typedef empty_stat        stat;
             /// Node allocator
             typedef cds::details::memkind_allocator<int>       allocator;
+
+            typedef atomics_insert<> insert_policy;
         };
 
 
@@ -148,8 +246,16 @@ namespace cds { namespace container {
             typedef Bag bag_type;
             typedef Traits traits;
 
-            struct node_type : public intrusive::basket_queue::node<gc>
+            struct node_type
             {
+                typedef GC gc;
+                typedef cds::details::marked_ptr<node_type, 1>                    marked_ptr;        ///< marked pointer
+                typedef typename gc::template atomic_marked_ptr< marked_ptr> atomic_marked_ptr; ///< atomic marked pointer specific for GC
+
+                char pad_1[cds::c_nCacheLineSize];
+                atomic_marked_ptr m_pNext __attribute__((aligned(cds::c_nCacheLineSize))) {marked_ptr{}}; ///< pointer to the next node in the container
+                uuid_type m_basket_id {0};
+                char pad1[2 * cds::c_nCacheLineSize - sizeof(m_pNext) - sizeof(m_basket_id)];
                 //std::atomic<bool> deleted __attribute__((aligned(cds::c_nCacheLineSize))){false};
                 bag_type m_bag __attribute__((aligned(cds::c_nCacheLineSize)));
 
@@ -171,15 +277,9 @@ namespace cds { namespace container {
                 }
             };
 
-            struct intrusive_traits : public traits
-            {
-                typedef cds::intrusive::basket_queue::base_hook<opt::gc<gc>> hook;
-                typedef node_deallocator disposer;
-                static constexpr const cds::intrusive::opt::link_check_type link_checker = cds::intrusive::basket_queue::traits::link_checker;
-            };
+            typedef node_deallocator disposer;
+            typedef typename intrusive::single_link::get_link_checker< node_type, traits::link_checker >::type link_checker;   ///< link checker
 
-            typedef cds::intrusive::BasketQueue<gc, node_type, intrusive_traits> type;
-            static constexpr const size_t c_nHazardPtrCount = type::c_nHazardPtrCount + bag_type::c_nHazardPtrCount; ///< Count of hazard pointer required for the algorithm
         };
     } // namespace details
     //@endcond
@@ -189,7 +289,6 @@ namespace cds { namespace container {
     {
         //@cond
         typedef details::make_sb_basket_queue<GC, Bag<T*>, Traits> maker;
-        typedef typename maker::type base_class;
         //@endcond
 
     public:
@@ -205,27 +304,27 @@ namespace cds { namespace container {
         typedef T value_type;  ///< Type of value to be stored in the queue
         typedef Traits traits; ///< Queue's traits
 
-        typedef typename base_class::back_off back_off;         ///< Back-off strategy used
+        typedef typename traits::back_off back_off;         ///< Back-off strategy used
         typedef typename maker::allocator_type allocator_type;  ///< Allocator type used for allocate/deallocate the nodes
-        typedef typename base_class::item_counter item_counter; ///< Item counting policy used
-        typedef typename base_class::stat stat;                 ///< Internal statistics policy used
-        typedef typename base_class::memory_model memory_model; ///< Memory ordering. See cds::opt::memory_model option
+        typedef typename traits::item_counter item_counter; ///< Item counting policy used
+        typedef typename traits::stat stat;                 ///< Internal statistics policy used
+        typedef typename traits::memory_model memory_model; ///< Memory ordering. See cds::opt::memory_model option
 
-        static constexpr const size_t c_nHazardPtrCount = maker::c_nHazardPtrCount; ///< Count of hazard pointer required for the algorithm
 
-        typedef typename base_class::insert_policy insert_policy;
+        typedef typename traits::insert_policy insert_policy;
+        
+        static constexpr size_t c_nHazardPtrCount = 0;
 
     protected:
         typedef typename maker::node_type node_type;           ///< queue node type (derived from intrusive::basket_queue::node)
-        typedef typename base_class::node_type base_node_type; ///< queue node type (derived from intrusive::basket_queue::node)
 
         //@cond
         typedef typename maker::cxx_allocator cxx_allocator;
         typedef typename maker::node_deallocator node_deallocator; // deallocate node
-        typedef typename base_class::node_traits node_traits;
-        typedef typename base_class::link_checker link_checker;
-        typedef typename base_node_type::marked_ptr marked_ptr;
-        typedef typename base_node_type::atomic_marked_ptr atomic_marked_ptr;
+        typedef typename maker::link_checker link_checker;
+        typedef typename node_type::marked_ptr marked_ptr;
+        typedef typename node_type::atomic_marked_ptr atomic_marked_ptr;
+
         //@endcond
 
         //@cond
@@ -300,13 +399,13 @@ namespace cds { namespace container {
         {
             clear();
 
-            base_node_type *pHead = m_pHead.load(memory_model::memory_order_relaxed).ptr();
+            node_type *pHead = m_pHead.load(memory_model::memory_order_relaxed).ptr();
             assert(pHead != nullptr);
 
             {
-                base_node_type *pNext = pHead->m_pNext.load(memory_model::memory_order_relaxed).ptr();
+                node_type *pNext = pHead->m_pNext.load(memory_model::memory_order_relaxed).ptr();
                 while (pNext) {
-                    base_node_type *p = pNext;
+                    node_type *p = pNext;
                     pNext = pNext->m_pNext.load(memory_model::memory_order_relaxed).ptr();
                     p->m_pNext.store(marked_ptr(), memory_model::memory_order_relaxed);
                     dispose_node(p);
@@ -408,8 +507,7 @@ namespace cds { namespace container {
 
     private:
         static bool is_empty(marked_ptr p) {
-          auto node_ptr = node_traits::to_value_ptr(p.ptr());
-          return node_ptr->m_bag.empty();
+          return p->m_bag.empty();
         }
 
         marked_ptr protect(atomic_marked_ptr& p, size_t id) {
@@ -455,7 +553,6 @@ namespace cds { namespace container {
             using InsertResult = typename insert_policy::InsertResult;
             auto& tstat = m_nodes_cache[id].stats;
             auto& node_ptr = th.node;
-            base_node_type* pNew{nullptr};
 
             back_off bkoff;
 
@@ -465,28 +562,22 @@ namespace cds { namespace container {
                 if(!node_ptr) {
                   node_ptr.reset(alloc_node());
                   assert(node_ptr.get() != nullptr);
-                  assert(pNew == nullptr);
-                  node_ptr.get()->m_pNext.store(marked_ptr(nullptr), std::memory_order_relaxed);
                   link_checker::is_empty(node_ptr.get());
                   // node_ptr->m_basket_id = uuid();
                 }
-                if(!pNew) {
-                  pNew = node_traits::to_node_ptr(node_ptr.get());
-                  link_checker::is_empty(pNew);
-                }
 
                 marked_ptr pNext{};
-                pNew->m_basket_id = t->m_basket_id + 1;
-                pNew->m_pNext.store(marked_ptr{}, std::memory_order_relaxed);
+                node_ptr->m_basket_id = t->m_basket_id + 1;
+                node_ptr->m_pNext.store(marked_ptr{}, std::memory_order_relaxed);
                 node_ptr->m_bag.unsafe_insert(val, id);
                 typename insert_policy::InsertResult res;
                 int i = 0;
-                pNext = pNew->m_pNext.load(std::memory_order_acquire);
+                pNext = node_ptr->m_pNext.load(std::memory_order_acquire);
                 if(pNext.ptr() != nullptr) {
                   res =  InsertResult::NOT_NULL;
                 } else {
                   do {
-                    res = m_insert_policy.template _<memory_model>(t, marked_ptr(pNew), pNext);
+                    res = m_insert_policy.template _<memory_model>(t, marked_ptr(node_ptr.get()), pNext);
                     if(res == InsertResult::RETRY) {
                       tstat.onRetryInsert();
                     } else {
@@ -500,17 +591,15 @@ namespace cds { namespace container {
                 }
 
                 if ( res == InsertResult::SUCCESSFUL_INSERT) {
-                    node_ptr.release();
-                    auto node = node_traits::to_value_ptr(pNew);
+                    auto node = node_ptr.release();
                     auto copy_t = t;
-                    if (!m_pTail.compare_exchange_strong(copy_t, marked_ptr(pNew), memory_model::memory_order_release, atomics::memory_order_relaxed))
+                    if (!m_pTail.compare_exchange_strong(copy_t, marked_ptr(node), memory_model::memory_order_release, atomics::memory_order_relaxed))
                         tstat.onAdvanceTailFailed();
                     // if(cds_unlikely(th.last_node == node->m_basket_id)) {
                     //   std::stringstream s;
                     //   s << "My bag " << std::hex << th.last_node << ' ' << node->m_basket_id << ' ' << id;
                     //   throw std::logic_error(s.str());
                     // };
-                    pNew = nullptr; // Need to do this after we update node_ptr
                     //th.last_node = node->m_basket_id;
                     break;
                 } else if ( res == insert_policy::InsertResult::FAILED_INSERT ) {
@@ -520,13 +609,12 @@ namespace cds { namespace container {
 
                     // add to the basket
                     bkoff();
-                    auto node = node_traits::to_value_ptr(pNext.ptr());
                     // if(cds_unlikely(th.last_node == node->m_basket_id)) {
                     //   std::stringstream s;
                     //   s << "Other bag " << std::hex << th.last_node << ' ' << node->m_basket_id << ' ' << id;
                     //   throw std::logic_error(s.str());
                     // }
-                    if (cds_likely(node->m_bag.insert(val, id, std::false_type{}))) {
+                    if (cds_likely(pNext->m_bag.insert(val, id, std::false_type{}))) {
                         tstat.onAddBasket();
                         // th.last_node = node->m_basket_id;
                         break;
@@ -642,11 +730,11 @@ namespace cds { namespace container {
               return (v != -1 && v < state) ? v : state;
             });
             assert(min_id != -1);
-            typename base_class::disposer disposer;
+            typename maker::disposer disposer;
             while(head->m_basket_id < min_id) {
               auto tmp = head->m_pNext.load(std::memory_order_relaxed);
               assert(is_empty(head));
-              node_type* p = node_traits::to_value_ptr(head.ptr());
+              node_type* p = head.ptr();
               if(p != &m_Dummy) {
                 clear_links(p);
                 disposer(p);
@@ -657,20 +745,20 @@ namespace cds { namespace container {
             m_pCapacity.store(head, std::memory_order_release);
         }
 
-        void dispose_node(base_node_type *p)
+        void dispose_node(node_type *p)
         {
-            using disposer = typename base_class::disposer;
+            using disposer = typename maker::disposer;
             if (p != &m_Dummy) {
                 struct internal_disposer
                 {
                     void operator()(node_type *p)
                     {
                         assert(p != nullptr);
-                        clear_links(node_traits::to_node_ptr(p));
+                        clear_links(p);
                         disposer()(p);
                     }
                 };
-                gc::template retire<internal_disposer>(node_traits::to_value_ptr(p));
+                gc::template retire<internal_disposer>(p);
             }
         }
 
@@ -714,18 +802,17 @@ namespace cds { namespace container {
                     return false;
                 }
 
-                auto value_node = node_traits::to_value_ptr(*iter.ptr());
                 if(!bDeque) {
                     // Not sure how thread safe that is
                     // res.basket_id = pNext->m_basket_id;
                     release(id + m_ids);
-                    return !value_node->m_bag.empty();
+                    return !iter->m_bag.empty();
                 }
-                if (value_node->m_bag.extract(res.value, id)) {
+                if (iter->m_bag.extract(res.value, id)) {
                     if(hops >= m_nMaxHops && advance_node(m_pHead, iter)) {
                       free_chain(id);
                     }
-                    res.basket_id = value_node->m_basket_id;
+                    res.basket_id = iter->m_basket_id;
                     if(res.basket_id == tcache.last_node) {
                       tstat.onSameNodeExtract();
                     }
@@ -761,7 +848,7 @@ namespace cds { namespace container {
             return true;
         }
 
-        static void clear_links(base_node_type *pNode)
+        static void clear_links(node_type *pNode)
         {
             pNode->m_pNext.store(marked_ptr(nullptr), memory_model::memory_order_release);
         }
