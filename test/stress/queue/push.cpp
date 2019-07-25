@@ -185,7 +185,6 @@ namespace {
     CDSSTRESS_MSQueue( queue_push )
     CDSSTRESS_MoirQueue( queue_push )
     CDSSTRESS_BasketQueue( queue_push )
-    CDSSTRESS_HTMBasketQueue( queue_push )
     CDSSTRESS_OptimsticQueue( queue_push )
     CDSSTRESS_FCQueue( queue_push )
     CDSSTRESS_FCDeque( queue_push )
@@ -193,7 +192,6 @@ namespace {
     CDSSTRESS_StdQueue( queue_push )
 
     static_assert(!set_threads<queue::Types<int>::BasketQueue_HP>::TRIVIAL, "");
-    static_assert(!set_threads<queue::Types<int>::HTMBasketQueue_HP>::TRIVIAL, "");
 
 #undef CDSSTRESS_Queue_F
 #define CDSSTRESS_Queue_F( test_fixture, type_name ) \

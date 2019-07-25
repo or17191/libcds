@@ -798,7 +798,7 @@ namespace cds { namespace container {
             }
 
             using namespace std::chrono;
-            constexpr microseconds USEC_TIMOUT(200);
+            constexpr microseconds USEC_TIMOUT(100);
             constexpr uint64_t WAIT_TIMEOUT = (duration_cast<nanoseconds>(USEC_TIMOUT).count() * 22) / 10;
             uint64_t w = read_tsc() + WAIT_TIMEOUT;
 

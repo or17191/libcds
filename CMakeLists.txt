@@ -122,7 +122,7 @@ if(CMAKE_COMPILER_IS_GNUCXX OR CMAKE_CXX_COMPILER_ID STREQUAL "Clang" OR CMAKE_C
     list(APPEND LIBCDS_PRIVATE_CXX_FLAGS "-Wall" "-Wextra" "-pedantic")
 
     if(OPTIMIZE_FOR_NATIVE)
-        list(APPEND LIBCDS_PUBLIC_CXX_FLAGS "-march=native")
+        list(APPEND LIBCDS_PUBLIC_CXX_FLAGS "-march=native" "-g")
     endif()
 
     if(CMAKE_TARGET_ARCHITECTURE STREQUAL "x86_64")

@@ -4,7 +4,6 @@ set(CDSGTEST_QUEUE_SOURCES
     ../main.cpp
     basket_queue_hp.cpp
     basket_queue_dhp.cpp
-    htm_basket_queue_hp.cpp
     fcqueue.cpp
     moirqueue_hp.cpp
     moirqueue_dhp.cpp
@@ -19,7 +18,6 @@ set(CDSGTEST_QUEUE_SOURCES
     weak_ringbuffer.cpp
     intrusive_basket_queue_hp.cpp
     intrusive_basket_queue_dhp.cpp
-    intrusive_htm_basket_queue_hp.cpp
     intrusive_fcqueue.cpp
     intrusive_msqueue_hp.cpp
     intrusive_msqueue_dhp.cpp

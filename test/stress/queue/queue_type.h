@@ -12,7 +12,6 @@
 #include <cds/container/optimistic_queue.h>
 #include <cds/container/vyukov_mpmc_cycle_queue.h>
 #include <cds/container/basket_queue.h>
-#include <cds/container/htm_basket_queue.h>
 #include <cds/container/fcqueue.h>
 #include <cds/container/fcdeque.h>
 #include <cds/container/segmented_queue.h>
@@ -383,12 +382,6 @@ namespace fc_details{
         };
         typedef cds::container::BasketQueue< cds::gc::HP,  Value, traits_BasketQueue_stat > BasketQueue_HP_stat;
         typedef cds::container::BasketQueue< cds::gc::DHP, Value, traits_BasketQueue_stat > BasketQueue_DHP_stat;
-
-        // HTMBasketQueue
-
-        typedef cds::container::HTMBasketQueue< cds::gc::HP , Value > HTMBasketQueue_HP;
-        typedef cds::container::HTMBasketQueue< cds::gc::HP,  Value, traits_BasketQueue_ic > HTMBasketQueue_HP_ic;
-        typedef cds::container::HTMBasketQueue< cds::gc::HP,  Value, traits_BasketQueue_stat > HTMBasketQueue_HP_stat;
 
         // RWQueue
         typedef cds::container::RWQueue< Value > RWQueue_Spin;
@@ -786,9 +779,6 @@ namespace cds_test {
         CDSSTRESS_Queue_F( test_fixture, StdQueue_deque_Mutex   ) \
         CDSSTRESS_Queue_F( test_fixture, StdQueue_list_Mutex    ) \
 
-#   define CDSSTRESS_HTMBasketQueue_1( test_fixture ) \
-        CDSSTRESS_Queue_F( test_fixture, HTMBasketQueue_HP_ic      )
-
 #else
 #   define CDSSTRESS_MSQueue_1( test_fixture )
 #   define CDSSTRESS_MoirQueue_1( test_fixture )
@@ -800,7 +790,6 @@ namespace cds_test {
 #   define CDSSTRESS_RWQueue_1( test_fixture )
 #   define CDSSTRESS_SegmentedQueue_1( test_fixture )
 #   define CDSSTRESS_StdQueue_1( test_fixture )
-#   define CDSSTRESS_HTMBasketQueue_1( test_fixture )
 #endif
 
 #define CDSSTRESS_MSQueue( test_fixture ) \
@@ -830,15 +819,6 @@ namespace cds_test {
     CDSSTRESS_Queue_F( test_fixture, BasketQueue_DHP        ) \
     CDSSTRESS_Queue_F( test_fixture, BasketQueue_DHP_stat   ) \
     CDSSTRESS_BasketQueue_1( test_fixture )
-
-#ifdef CDS_HTM_SUPPORT
-#define CDSSTRESS_HTMBasketQueue( test_fixture ) \
-    CDSSTRESS_Queue_F( test_fixture, HTMBasketQueue_HP         ) \
-    CDSSTRESS_Queue_F( test_fixture, HTMBasketQueue_HP_stat    ) \
-    CDSSTRESS_HTMBasketQueue_1( test_fixture )
-#else // CDS_HTM_SUPPORT
-#   define CDSSTRESS_HTMBasketQueue( test_fixture)
-#endif // CDS_HTM_SUPPORT
 
 #define CDSSTRESS_FCQueue( test_fixture ) \
     CDSSTRESS_Queue_F( test_fixture, FCQueue_deque              ) \

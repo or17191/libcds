@@ -11,7 +11,6 @@
 #include <cds/intrusive/optimistic_queue.h>
 #include <cds/intrusive/vyukov_mpmc_cycle_queue.h>
 #include <cds/intrusive/basket_queue.h>
-#include <cds/intrusive/htm_basket_queue.h>
 #include <cds/intrusive/fcqueue.h>
 #include <cds/intrusive/segmented_queue.h>
 
@@ -272,8 +271,6 @@ namespace queue {
         {};
         typedef cds::intrusive::BasketQueue< cds::gc::HP, T, traits_BasketQueue_HP > BasketQueue_HP;
 
-        typedef cds::intrusive::HTMBasketQueue< cds::gc::HP, T, traits_BasketQueue_HP > HTMBasketQueue_HP;
-
         struct traits_BasketQueue_HP_seqcst: public
             cds::intrusive::basket_queue::make_traits <
                 cds::intrusive::opt::hook< cds::intrusive::basket_queue::base_hook< cds::opt::gc< cds::gc::HP > > >
@@ -306,8 +303,6 @@ namespace queue {
         {};
         typedef cds::intrusive::BasketQueue< cds::gc::HP, T, traits_BasketQueue_HP_ic > BasketQueue_HP_ic;
 
-        typedef cds::intrusive::HTMBasketQueue< cds::gc::HP, T, traits_BasketQueue_HP_ic > HTMBasketQueue_HP_ic;
-
         struct traits_BasketQueue_DHP_ic : public
             cds::intrusive::basket_queue::make_traits <
                 cds::intrusive::opt::hook< cds::intrusive::basket_queue::base_hook< cds::opt::gc< cds::gc::DHP > > >
@@ -324,8 +319,6 @@ namespace queue {
             > ::type
         {};
         typedef cds::intrusive::BasketQueue< cds::gc::HP, T, traits_BasketQueue_HP_stat > BasketQueue_HP_stat;
-
-        typedef cds::intrusive::HTMBasketQueue< cds::gc::HP, T, traits_BasketQueue_HP_stat > HTMBasketQueue_HP_stat;
 
         struct traits_BasketQueue_DHP_stat : public
             cds::intrusive::basket_queue::make_traits <

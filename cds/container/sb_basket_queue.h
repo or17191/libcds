@@ -8,7 +8,6 @@
 
 #include <memory>
 
-#include <cds/container/details/base.h>
 #include <cds/intrusive/basket_queue.h>
 #include <cds/details/memkind_allocator.h>
 #include <cds/sync/htm.h>

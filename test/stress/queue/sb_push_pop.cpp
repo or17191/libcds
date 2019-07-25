@@ -584,23 +584,24 @@ namespace {
     CDSSTRESS_WFQueue_F( simple_sb_queue_push_pop, WFQueue_Stat)
 
     using namespace cds::container::bags;
+    namespace sb_basket_queue = cds::container::sb_basket_queue;
 
     // template <class Fixture>
     // using SBStackBasketQueue_HP = cds::container::SBBasketQueue<typename Fixture::gc_type, typename Fixture::value_type, StackBag>;
     // CDSSTRESS_Queue_F( simple_sb_queue_push_pop, SBStackBasketQueue_HP )
 
     struct htm_traits : cds::container::sb_basket_queue::traits {
-      typedef cds::intrusive::htm_basket_queue::htm_insert<> insert_policy;
+      typedef sb_basket_queue::htm_insert<> insert_policy;
     };
 
-    using cds::intrusive::htm_basket_queue::Linear;
-    using cds::intrusive::htm_basket_queue::Constant;
+    using sb_basket_queue::Linear;
+    using sb_basket_queue::Constant;
 
     struct htm_id_traits : cds::container::sb_basket_queue::traits {
-      typedef cds::intrusive::htm_basket_queue::htm_insert<Linear<17, 40>, Constant<30>> insert_policy;
+      typedef sb_basket_queue::htm_insert<Linear<17, 40>, Constant<30>> insert_policy;
     };
     struct htm_mod_id_traits : cds::container::sb_basket_queue::traits {
-      typedef cds::intrusive::htm_basket_queue::htm_insert<Linear<10>, Constant<20>> insert_policy;
+      typedef sb_basket_queue::htm_insert<Linear<10>, Constant<20>> insert_policy;
     };
 
     /*
