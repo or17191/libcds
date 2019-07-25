@@ -36,7 +36,7 @@ function test_executable() {
   tests=$(
     $executable --gtest_list_tests |
     ../discover_tests.py |
-    grep '\.WF\|SB' |
+    grep 'sb' |
     grep -v -i 'DHP\|ic\|stat\|intrusive')
    
   echo "Testing ${test_name}"

@@ -299,53 +299,47 @@ namespace {
     using sb_basket_queue::Linear;
     using sb_basket_queue::Constant;
 
-    //using SBSimpleBasketQueue_HP = cds::container::SBBasketQueue<gc_type, value_type, SimpleBag>;
-    struct cas_id_traits : cds::container::sb_basket_queue::traits {
+    struct fast_cas_id_traits : cds::container::sb_basket_queue::traits {
       typedef sb_basket_queue::atomics_insert<Constant<350>> insert_policy;
-      //typedef cds::intrusive::basket_queue::atomics_insert<Constant<720>> insert_policy;
-      //typedef cds::intrusive::basket_queue::atomics_insert<Constant<440>> insert_policy;
     };
-    using SBIdBasketQueue_HP = cds::container::SBBasketQueue<gc_type, value_type, IdBag, cas_id_traits>;
-    //using SBStackBasketQueue_HP = cds::container::SBBasketQueue<gc_type, value_type, StackBag>;
-
-    struct htm_traits : cds::container::sb_basket_queue::traits {
-      typedef sb_basket_queue::htm_insert<> insert_policy;
+    using FastSBIdBasketQueue_HP = cds::container::SBBasketQueue<gc_type, value_type, IdBag, fast_cas_id_traits>;
+    struct slow_cas_id_traits : cds::container::sb_basket_queue::traits {
+      typedef sb_basket_queue::atomics_insert<Constant<720>> insert_policy;
     };
+    using SlowSBIdBasketQueue_HP = cds::container::SBBasketQueue<gc_type, value_type, IdBag, slow_cas_id_traits>;
 
-    struct htm_id_traits : cds::container::sb_basket_queue::traits {
+    struct fast_htm_id_traits : cds::container::sb_basket_queue::traits {
       typedef sb_basket_queue::htm_insert<Constant<350>, Constant<30>> insert_policy;
-      //typedef cds::intrusive::htm_basket_queue::htm_insert<Constant<720>, Constant<30>> insert_policy;
-      //typedef cds::intrusive::htm_basket_queue::htm_insert<Constant<440>, Constant<30>> insert_policy;
-      //typedef cds::intrusive::htm_basket_queue::htm_insert<Linear<10, 40>, Constant<30>> insert_policy;
     };
-    struct htm_id_stat_traits : public htm_id_traits
+    using FastHTMSBIdBasketQueue_HP = cds::container::SBBasketQueue<gc_type, value_type, IdBag, fast_htm_id_traits>;
+    struct slow_htm_id_traits : cds::container::sb_basket_queue::traits {
+      typedef sb_basket_queue::htm_insert<Constant<720>, Constant<30>> insert_policy;
+    };
+    using SlowHTMSBIdBasketQueue_HP = cds::container::SBBasketQueue<gc_type, value_type, IdBag, slow_htm_id_traits>;
+
+    struct stat_traits : public slow_cas_id_traits
+    {
+        typedef cds::container::sb_basket_queue::stat<> stat;
+    };
+    struct htm_id_stat_traits : public slow_htm_id_traits
     {
         typedef cds::container::sb_basket_queue::stat<> stat;
     };
 
-    struct stat_traits : public cds::container::sb_basket_queue::traits 
-    {
-        typedef cds::container::sb_basket_queue::stat<> stat;
-    };
-
-    //using HTMSBSimpleBasketQueue_HP = cds::container::SBBasketQueue<gc_type, value_type, SimpleBag, htm_traits>;
-    using HTMSBIdBasketQueue_HP = cds::container::SBBasketQueue<gc_type, value_type, IdBag, htm_id_traits>;
     using HTMSBIdBasketQueue_HP_Stat = cds::container::SBBasketQueue<gc_type, value_type, IdBag, htm_id_stat_traits>;
-    //using HTMSBStackBasketQueue_HP = cds::container::SBBasketQueue<gc_type, value_type, StackBag, htm_traits>;
-
-    //static_assert(std::is_same<HTMSBSimpleBasketQueue_HP::insert_policy, htm_traits::insert_policy>::value, "Use htm");
-
     using SBIdBasketQueue_HP_Stat = cds::container::SBBasketQueue<gc_type, value_type, IdBag, stat_traits>;
 
    // CDSSTRESS_QUEUE_F( SBSimpleBasketQueue_HP)
-    CDSSTRESS_QUEUE_F( SBIdBasketQueue_HP)
+    CDSSTRESS_QUEUE_F( FastSBIdBasketQueue_HP)
+    CDSSTRESS_QUEUE_F( SlowSBIdBasketQueue_HP)
     //CDSSTRESS_QUEUE_F( SBStackBasketQueue_HP)
 
     CDSSTRESS_QUEUE_F( SBIdBasketQueue_HP_Stat)
 
 #ifdef CDS_HTM_SUPPORT
     //CDSSTRESS_QUEUE_F( HTMSBSimpleBasketQueue_HP)
-    CDSSTRESS_QUEUE_F( HTMSBIdBasketQueue_HP)
+    CDSSTRESS_QUEUE_F( FastHTMSBIdBasketQueue_HP)
+    CDSSTRESS_QUEUE_F( SlowHTMSBIdBasketQueue_HP)
     CDSSTRESS_QUEUE_F( HTMSBIdBasketQueue_HP_Stat)
     //CDSSTRESS_QUEUE_F( HTMSBStackBasketQueue_HP)
 #endif // CDS_HTM_SUPPORT

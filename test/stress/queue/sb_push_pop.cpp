@@ -590,63 +590,60 @@ namespace {
 
     using namespace cds::container::bags;
     namespace sb_basket_queue = cds::container::sb_basket_queue;
-
-    // template <class Fixture>
-    // using SBStackBasketQueue_HP = cds::container::SBBasketQueue<typename Fixture::gc_type, typename Fixture::value_type, StackBag>;
-    // CDSSTRESS_Queue_F( simple_sb_queue_push_pop, SBStackBasketQueue_HP )
-
-    struct htm_traits : cds::container::sb_basket_queue::traits {
-      typedef sb_basket_queue::htm_insert<> insert_policy;
-    };
-
     using sb_basket_queue::Linear;
     using sb_basket_queue::Constant;
 
-    struct htm_id_traits : cds::container::sb_basket_queue::traits {
-      typedef sb_basket_queue::htm_insert<Linear<17, 40>, Constant<30>> insert_policy;
+    struct fast_cas_id_traits : cds::container::sb_basket_queue::traits {
+      typedef sb_basket_queue::atomics_insert<Constant<350>> insert_policy;
     };
-    struct htm_mod_id_traits : cds::container::sb_basket_queue::traits {
-      typedef sb_basket_queue::htm_insert<Linear<10>, Constant<20>> insert_policy;
+    template<class Fixture>
+    using FastSBIdBasketQueue_HP = cds::container::SBBasketQueue<typename Fixture::gc_type, typename Fixture::value_type, IdBag, fast_cas_id_traits>;
+    struct slow_cas_id_traits : cds::container::sb_basket_queue::traits {
+      typedef sb_basket_queue::atomics_insert<Constant<720>> insert_policy;
     };
+    template<class Fixture>
+    using SlowSBIdBasketQueue_HP = cds::container::SBBasketQueue<typename Fixture::gc_type, typename Fixture::value_type, IdBag, slow_cas_id_traits>;
 
-    /*
-    template <class Fixture>
-    using SBSimpleBasketQueue_HP = cds::container::SBBasketQueue<typename Fixture::gc_type, typename Fixture::value_type, SimpleBag>;
-    */
+    struct fast_htm_id_traits : cds::container::sb_basket_queue::traits {
+      typedef sb_basket_queue::htm_insert<Constant<350>, Constant<30>> insert_policy;
+    };
+    template<class Fixture>
+    using FastHTMSBIdBasketQueue_HP = cds::container::SBBasketQueue<typename Fixture::gc_type, typename Fixture::value_type, IdBag, fast_htm_id_traits>;
+    struct slow_htm_id_traits : cds::container::sb_basket_queue::traits {
+      typedef sb_basket_queue::htm_insert<Constant<720>, Constant<30>> insert_policy;
+    };
+    template<class Fixture>
+    using SlowHTMSBIdBasketQueue_HP = cds::container::SBBasketQueue<typename Fixture::gc_type, typename Fixture::value_type, IdBag, slow_htm_id_traits>;
 
-    template <class Fixture>
-    using SBIdBasketQueue_HP = cds::container::SBBasketQueue<typename Fixture::gc_type, typename Fixture::value_type, IdBag>;
-
-    //CDSSTRESS_Queue_F( simple_sb_queue_push_pop, SBSimpleBasketQueue_HP )
-    CDSSTRESS_Queue_F( simple_sb_queue_push_pop, SBIdBasketQueue_HP)
-
-    /*
-    template <class Fixture>
-    using HTMSBSimpleBasketQueue_HP = cds::container::SBBasketQueue<typename Fixture::gc_type, typename Fixture::value_type, SimpleBag, htm_traits>;
-    */
-
-    template <class Fixture>
-    using HTMSBIdBasketQueue_HP = cds::container::SBBasketQueue<typename Fixture::gc_type, typename Fixture::value_type, IdBag, htm_id_traits>;
-
-    template <class Fixture>
-    using HTMSBHalfIdBasketQueue_HP = cds::container::SBBasketQueue<typename Fixture::gc_type, typename Fixture::value_type, HalfIdBag, htm_mod_id_traits>;
-
-    //CDSSTRESS_Queue_F( simple_sb_queue_push_pop, HTMSBSimpleBasketQueue_HP )
-    CDSSTRESS_Queue_F( simple_sb_queue_push_pop, HTMSBIdBasketQueue_HP)
-    CDSSTRESS_Queue_F( simple_sb_queue_push_pop, HTMSBHalfIdBasketQueue_HP)
-
-    template <class Fixture>
-    using HTMSBRandomIdBasketQueue_HP = cds::container::SBBasketQueue<typename Fixture::gc_type, typename Fixture::value_type, RandomIdBag, htm_id_traits>;
-    CDSSTRESS_Queue_F( simple_sb_queue_push_pop, HTMSBRandomIdBasketQueue_HP)
-
-    struct htm_id_stat_traits : public htm_id_traits
+    struct stat_traits : public slow_cas_id_traits
     {
         typedef cds::container::sb_basket_queue::stat<> stat;
     };
-    template <class Fixture>
-    using HTMSBIdBasketQueue_HP_Stat = cds::container::SBBasketQueue<typename Fixture::gc_type, typename Fixture::value_type, IdBag, htm_id_stat_traits>;
+    struct htm_id_stat_traits : public slow_htm_id_traits
+    {
+        typedef cds::container::sb_basket_queue::stat<> stat;
+    };
 
+    template<class Fixture>
+    using HTMSBIdBasketQueue_HP_Stat = cds::container::SBBasketQueue<typename Fixture::gc_type, typename Fixture::value_type, IdBag, htm_id_stat_traits>;
+    template<class Fixture>
+    using SBIdBasketQueue_HP_Stat = cds::container::SBBasketQueue<typename Fixture::gc_type, typename Fixture::value_type, IdBag, stat_traits>;
+
+   // CDSSTRESS_Queue_F( SBSimpleBasketQueue_HP)
+    CDSSTRESS_Queue_F( simple_sb_queue_push_pop, FastSBIdBasketQueue_HP)
+    CDSSTRESS_Queue_F( simple_sb_queue_push_pop, SlowSBIdBasketQueue_HP)
+    //CDSSTRESS_Queue_F( SBStackBasketQueue_HP)
+
+    CDSSTRESS_Queue_F( simple_sb_queue_push_pop, SBIdBasketQueue_HP_Stat)
+
+#ifdef CDS_HTM_SUPPORT
+    //CDSSTRESS_Queue_F( HTMSBSimpleBasketQueue_HP)
+    CDSSTRESS_Queue_F( simple_sb_queue_push_pop, FastHTMSBIdBasketQueue_HP)
+    CDSSTRESS_Queue_F( simple_sb_queue_push_pop, SlowHTMSBIdBasketQueue_HP)
     CDSSTRESS_Queue_F( simple_sb_queue_push_pop, HTMSBIdBasketQueue_HP_Stat)
+    //CDSSTRESS_Queue_F( HTMSBStackBasketQueue_HP)
+#endif // CDS_HTM_SUPPORT
+
 #undef CDSSTRESS_Queue_F
 
 
