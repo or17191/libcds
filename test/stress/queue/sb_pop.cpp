@@ -375,7 +375,11 @@ namespace {
     template <class Fixture>
     using WFQueue = cds::container::WFQueue<typename Fixture::value_type>;
 
+    template <class Fixture>
+    using CCQueue = cds::container::CCQueue<typename Fixture::value_type>;
+
     CDSSTRESS_Queue_F( simple_sb_queue_pop, WFQueue)
+    CDSSTRESS_Queue_F( simple_sb_queue_pop, CCQueue)
 
 
     // template <class Fixture>

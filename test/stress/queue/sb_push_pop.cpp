@@ -7,6 +7,7 @@
 
 #include <cds/container/sb_basket_queue.h>
 #include <cds/container/wf_queue.h>
+#include <cds/container/ccqueue.h>
 #include <cds/container/bags.h>
 #include <cds/details/memkind_allocator.h>
 
@@ -553,6 +554,9 @@ namespace {
     template <class Fixture>
     using WFQueue = cds::container::WFQueue<typename Fixture::value_type>;
 
+    template <class Fixture>
+    using CCQueue = cds::container::CCQueue<typename Fixture::value_type>;
+
     struct numa_wf_queue : public cds::container::wf_queue::traits {
       using numa_balance = std::true_type;
     };
@@ -562,6 +566,7 @@ namespace {
 
     CDSSTRESS_WFQueue_F( simple_sb_queue_push_pop, WFQueue)
     CDSSTRESS_WFQueue_F( simple_sb_queue_push_pop, NUMAWFQueue)
+    CDSSTRESS_WFQueue_F( simple_sb_queue_push_pop, CCQueue)
 
 
     // template <class Fixture>

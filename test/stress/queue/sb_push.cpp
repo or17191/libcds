@@ -341,7 +341,9 @@ namespace {
     namespace wf = cds::container::wf_queue;
 
     using WFQueue = cds::container::WFQueue<value_type>;
+    using CCQueue = cds::container::CCQueue<value_type>;
     CDSSTRESS_QUEUE_F( WFQueue, std::false_type )
+    CDSSTRESS_QUEUE_F( CCQueue, std::false_type )
     //static_assert(std::is_same<WFQueue::cell_getter, wf::default_cell_getter>::value, "");
 
     struct stat_wf_queue : public cds::container::wf_queue::traits {

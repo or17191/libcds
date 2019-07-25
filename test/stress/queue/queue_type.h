@@ -17,6 +17,7 @@
 #include <cds/container/segmented_queue.h>
 #include <cds/container/weak_ringbuffer.h>
 #include <cds/container/wf_queue.h>
+#include <cds/container/ccqueue.h>
 #include <cds/container/sb_basket_queue.h>
 
 #include <cds/gc/hp.h>
@@ -652,6 +653,11 @@ namespace cds_test {
     }
 
     static inline property_stream& operator <<( property_stream& o, cds::container::wf_queue::empty_stat const& /*s*/ )
+    {
+        return o;
+    }
+
+    static inline property_stream& operator <<( property_stream& o, cds::container::ccqueue::empty_stat const& /*s*/ )
     {
         return o;
     }
