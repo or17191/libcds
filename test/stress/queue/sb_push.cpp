@@ -33,6 +33,40 @@ namespace {
 
     struct empty {};
 
+    template<class Queue, class Value>
+    static bool push(Queue& queue, Value&& value, size_t id,
+        decltype(std::declval<Queue>().enqueue(std::forward<Value>(value), id))* = nullptr) {
+      return queue.enqueue(std::forward<Value>(value), id);
+    }
+
+    template<class Queue, class Value>
+    static bool push(Queue& queue, Value&& value, size_t id,
+        decltype(std::declval<Queue>().enqueue(std::forward<Value>(value)))* = nullptr) {
+      return queue.enqueue(std::forward<Value>(value));
+    }
+
+    template<class Queue, class Value>
+    static bool pop(Queue& queue, Value&& value, size_t id, cds::uuid_type& basket, std::true_type,
+        decltype(std::declval<Queue>().dequeue(std::forward<Value>(value), id))* = nullptr) {
+      return queue.dequeue(std::forward<Value>(value), id, std::addressof(basket));
+    }
+
+    template<class Queue, class Value>
+    static bool pop(Queue& queue, Value&& value, size_t id, cds::uuid_type& basket, std::false_type,
+        decltype(std::declval<Queue>().dequeue(std::forward<Value>(value), id))* = nullptr) {
+      basket = 0;
+      return queue.dequeue(std::forward<Value>(value), id);
+    }
+
+    template<class Queue, class Value, class HasBaskets>
+    static bool pop(Queue& queue, Value&& value, size_t id, cds::uuid_type& basket, HasBaskets,
+        decltype(std::declval<Queue>().dequeue(std::forward<Value>(value)))* = nullptr) {
+      return queue.dequeue(std::forward<Value>(value));
+    }
+
+    template<class T>
+    using safe_add_pointer = std::add_pointer<typename std::remove_pointer<T>::type>;
+
     class sb_queue_push : public cds_test::stress_fixture
     {
         typedef cds_test::stress_fixture base_class;
@@ -78,13 +112,12 @@ namespace {
 
             virtual void test()
             {
-                using value_type = typename Queue::value_type;
                 size_t i = 1;
                 const auto id_ = id();
                 m_Topology.pin_thread(id_);
                 auto start = clock_type::now();
                 for(size_t i = 1; i <= m_count; ++i, ++values) {
-                  while(!m_Queue.push(values, id_)) {
+                  while(!push(m_Queue, values, id_)) {
                     ++m_nPushFailed;
                   }
                 }
@@ -101,7 +134,7 @@ namespace {
             duration_type       m_Duration;
 
             size_t m_count;
-            typename Queue::value_type* values;
+            typename safe_add_pointer<typename Queue::value_type>::type values;
         };
 
     public:
@@ -154,24 +187,13 @@ namespace {
         void check_baskets(It first, It last, std::false_type) {
         }
 
-        template <class Queue, class Value>
-        bool pop(Queue& q, Value& value, size_t tid, cds::uuid_type& basket, std::true_type) {
-          return q.pop(value, tid, std::addressof(basket));
-        }
-
-        template <class Queue, class Value>
-        bool pop(Queue& q, Value& value, size_t tid, cds::uuid_type& basket, std::false_type) {
-          basket = 0;
-          return q.pop(value, tid);
-        }
-
         template <class Queue, class HasBaskets>
         void test( Queue& q, HasBaskets)
         {
             propout() << std::make_pair( "producer_count", s_nThreadCount )
                 << std::make_pair( "queue_size", s_nQueueSize );
 
-            cds::details::memkind_vector<typename Queue::value_type> storage(s_nQueueSize);
+            cds::details::memkind_vector<typename std::remove_pointer<typename Queue::value_type>::type> storage(s_nQueueSize);
 
             cds_test::thread_pool& pool = get_pool();
 
@@ -204,7 +226,7 @@ namespace {
             std::vector<record> values;
             values.reserve(s_nQueueSize);
             int pops = 0;
-            typename Queue::value_type* value = nullptr;
+            typename safe_add_pointer<typename Queue::value_type>::type value = nullptr;
             cds::uuid_type basket = 0;
             while(pop(q, value, 0, basket, HasBaskets{})) {
               EXPECT_NE(nullptr, value);
@@ -352,6 +374,17 @@ namespace {
 
     using WFQueue_stat = cds::container::WFQueue<value_type, stat_wf_queue>;
     CDSSTRESS_QUEUE_F( WFQueue_stat, std::false_type )
+
+#undef CDSSTRESS_QUEUE_F
+#define CDSSTRESS_QUEUE_F( QueueType) \
+    TEST_F( sb_queue_push, QueueType ) \
+    { \
+        QueueType q; \
+        test( q , std::false_type{}); \
+        QueueType::gc::force_dispose(); \
+    }
+    using VanillaBasketQueue = typename queue::Types<value_type*>::BasketQueue_HP;
+    CDSSTRESS_QUEUE_F( VanillaBasketQueue )
 /*
     struct stat_block_queue : public cds::container::sb_block_basket_queue::traits {
       typedef cds::container::wf_queue::stat<> stat;

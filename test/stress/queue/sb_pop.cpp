@@ -38,13 +38,40 @@ namespace {
       bool operator()(const old_value* lhs, const old_value* rhs) const { return cmp(lhs->nWriterNo, rhs->nWriterNo); }
     };
 
+    template<class Queue, class Value>
+    static bool push(Queue& queue, Value&& value, size_t id,
+        decltype(std::declval<Queue>().enqueue(std::forward<Value>(value), id))* = nullptr) {
+      return queue.enqueue(std::forward<Value>(value), id);
+    }
+
+    template<class Queue, class Value>
+    static bool push(Queue& queue, Value&& value, size_t id,
+        decltype(std::declval<Queue>().enqueue(std::forward<Value>(value)))* = nullptr) {
+      return queue.enqueue(std::forward<Value>(value));
+    }
+
+    template<class Queue, class Value>
+    static bool pop(Queue& queue, Value&& value, size_t id,
+        decltype(std::declval<Queue>().dequeue(std::forward<Value>(value), id))* = nullptr) {
+      return queue.dequeue(std::forward<Value>(value), id);
+    }
+
+    template<class Queue, class Value>
+    static bool pop(Queue& queue, Value&& value, size_t id,
+        decltype(std::declval<Queue>().dequeue(std::forward<Value>(value)))* = nullptr) {
+      return queue.dequeue(std::forward<Value>(value));
+    }
+
+    template<class T>
+    using safe_add_pointer = std::add_pointer<typename std::remove_pointer<T>::type>;
+
     template <class Queue>
-    size_t push_many(Queue& queue, const size_t first, const size_t last, const size_t producer, typename Queue::value_type* values) {
+    size_t push_many(Queue& queue, const size_t first, const size_t last, const size_t producer, typename safe_add_pointer<typename Queue::value_type>::type values) {
       size_t failed = 0;
       for(size_t i = first; i < last; ++i, ++values) {
         values->nNo = i;
         values->nWriterNo = producer;
-        while(!queue.push(values, producer)) {
+        while(!push(queue, values, producer)) {
           ++failed;
         }
       }
@@ -101,7 +128,7 @@ namespace {
             Queue&              m_Queue;
             size_t const        m_nPushCount;
             size_t              m_nWriterId;
-            typename Queue::value_type* values;
+            typename safe_add_pointer<typename Queue::value_type>::type values;
         };
 
         template <class Queue>
@@ -168,7 +195,7 @@ namespace {
                 bool writers_done = false;
                 auto start = clock_type::now();
                 while ( true ) {
-                    if (m_Queue.pop(v, m_nReaderId)) {
+                    if (pop(m_Queue, v, m_nReaderId)) {
                         ++m_nPopped;
                         m_WriterData.emplace_back(v);
                     }
@@ -207,7 +234,7 @@ namespace {
             size_t nPostTestPops = 0;
             {
                 value_type* v;
-                while ( q.pop( v, 0))
+                while ( pop(q, v, 0))
                     ++nPostTestPops;
             }
 
@@ -234,7 +261,7 @@ namespace {
 
             EXPECT_EQ( nTotalPops + nPostTestPops, s_nQueueSize ) << "nTotalPops=" << nTotalPops << ", nPostTestPops=" << nPostTestPops;
             value_type* v;
-            EXPECT_FALSE( q.pop(v, 0));
+            EXPECT_FALSE( pop(q, v, 0));
 
             // Test consistency of popped sequence
             for ( size_t nWriter = 0; nWriter < s_nThreadCount; ++nWriter ) {
@@ -271,7 +298,7 @@ namespace {
         }
 
         template <class Queue>
-        void test_queue( Queue& q, typename Queue::value_type* values)
+        void test_queue( Queue& q, typename safe_add_pointer<typename Queue::value_type>::type values)
         {
             typedef Consumer<Queue> consumer_type;
             typedef Producer<Queue> producer_type;
@@ -323,7 +350,7 @@ namespace {
         template <class Queue>
         void test( Queue& q)
         {
-            cds::details::memkind_vector<typename Queue::value_type> values(s_nQueueSize);
+            cds::details::memkind_vector<typename std::remove_pointer<typename Queue::value_type>::type> values(s_nQueueSize);
             test_queue( q, values.data());
             analyze( q );
             propout() << q.statistics();
@@ -453,6 +480,17 @@ namespace {
 
     CDSSTRESS_Queue_F( simple_sb_queue_pop, HTMSBIdBasketQueue_HP_Stat)
 #undef CDSSTRESS_Queue_F
+#define CDSSTRESS_QUEUE_F( QueueType) \
+    TEST_F( simple_sb_queue_pop, QueueType ) \
+    { \
+        using queue_type = QueueType<simple_sb_queue_pop>;\
+        queue_type q; \
+        test( q ); \
+        queue_type::gc::force_dispose(); \
+    }
+    template <class Fixture>
+    using VanillaBasketQueue = typename queue::Types<typename Fixture::value_type*>::BasketQueue_HP;
+    CDSSTRESS_QUEUE_F( VanillaBasketQueue )
 
 
 } // namespace
