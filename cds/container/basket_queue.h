@@ -8,7 +8,6 @@
 
 #include <cds/intrusive/basket_queue.h>
 #include <cds/container/details/base.h>
-#include <cds/details/memkind_allocator.h>
 #include <memory>
 
 namespace cds { namespace container {
@@ -29,7 +28,7 @@ namespace cds { namespace container {
         struct traits
         {
             /// Node allocator
-            typedef cds::details::memkind_allocator<int>       allocator;
+            typedef CDS_DEFAULT_ALLOCATOR       allocator;
 
             /// Back-off strategy
             typedef cds::backoff::empty         back_off;
@@ -50,8 +49,6 @@ namespace cds { namespace container {
                 or \p opt::v::sequential_consistent (sequentially consisnent memory model).
             */
             typedef opt::v::relaxed_ordering    memory_model;
-
-            typedef cds::intrusive::basket_queue::atomics_insert<>    insert_policy;
 
             /// Padding for internal critical atomic data. Default is \p opt::cache_line_padding
             enum { padding = opt::cache_line_padding };
@@ -286,8 +283,6 @@ namespace cds { namespace container {
         /// Destructor clears the queue
         ~BasketQueue()
         {}
-
-        using base_class::set_threads;
 
         /// Enqueues \p val value into the queue.
         /**

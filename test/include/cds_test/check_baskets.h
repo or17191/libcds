@@ -14,6 +14,8 @@
 #include <boost/accumulators/statistics/weighted_mean.hpp>
 #include <boost/accumulators/statistics/weighted_variance.hpp>
 
+#include <cds/algo/uuid.h>
+
 namespace cds_test {
 
 struct BasketsChecker {

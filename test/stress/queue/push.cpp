@@ -191,8 +191,6 @@ namespace {
     CDSSTRESS_RWQueue( queue_push )
     CDSSTRESS_StdQueue( queue_push )
 
-    static_assert(!set_threads<queue::Types<int>::BasketQueue_HP>::TRIVIAL, "");
-
 #undef CDSSTRESS_Queue_F
 #define CDSSTRESS_Queue_F( test_fixture, type_name ) \
     TEST_F( test_fixture, type_name ) \

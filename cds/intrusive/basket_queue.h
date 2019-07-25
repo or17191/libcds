@@ -9,7 +9,6 @@
 #include <type_traits>
 #include <cds/intrusive/details/single_link_struct.h>
 #include <cds/details/marked_ptr.h>
-#include <cds/algo/uuid.h>
 
 namespace cds { namespace intrusive {
 
@@ -39,12 +38,9 @@ namespace cds { namespace intrusive {
                 typedef node<GC2, Tag2>  other ;    ///< Rebinding result
             };
 
-            char pad_1[cds::c_nCacheLineSize];
-            atomic_marked_ptr m_pNext __attribute__((aligned(cds::c_nCacheLineSize))); ///< pointer to the next node in the container
-            uuid_type m_basket_id;
-            char pad1[2 * cds::c_nCacheLineSize - sizeof(m_pNext) - sizeof(m_basket_id)];
+            atomic_marked_ptr m_pNext ; ///< pointer to the next node in the container
 
-            node() : m_basket_id(0)
+            node()
             {
                 m_pNext.store( marked_ptr(), atomics::memory_order_release );
             }
@@ -131,7 +127,6 @@ namespace cds { namespace intrusive {
             counter_type m_TryAddBasket;    ///< Count of attemps adding new item to a basket (only or BasketQueue, for other queue this metric is not used)
             counter_type m_AddBasketCount;  ///< Count of events "Enqueue a new item into basket" (only or BasketQueue, for other queue this metric is not used)
             counter_type m_EmptyDequeue;    ///< Count of dequeue from empty queue
-            counter_type m_NullBasket;      ///< Count of number of insertions to empty basket
 
             /// Register enqueue call
             void onEnqueue()                { ++m_EnqueueCount; }
@@ -151,8 +146,6 @@ namespace cds { namespace intrusive {
             void onAddBasket()              { ++m_AddBasketCount; }
             /// Register dequeuing from empty queue
             void onEmptyDequeue()           { ++m_EmptyDequeue; }
-            /// Register insertion to null basket
-            void onNullBasket()             { ++m_NullBasket; }
 
 
             //@cond
@@ -167,7 +160,6 @@ namespace cds { namespace intrusive {
                 m_TryAddBasket.reset();
                 m_AddBasketCount.reset();
                 m_EmptyDequeue.reset();
-                m_NullBasket.reset();
             }
 
             stat& operator +=( stat const& s )
@@ -181,7 +173,6 @@ namespace cds { namespace intrusive {
                 m_TryAddBasket  += s.m_TryAddBasket.get();
                 m_AddBasketCount += s.m_AddBasketCount.get();
                 m_EmptyDequeue  += s.m_EmptyDequeue.get();
-                m_NullBasket    += s.m_NullBasket.get();
                 return *this;
             }
             //@endcond
@@ -200,7 +191,6 @@ namespace cds { namespace intrusive {
             void onTryAddBasket()       const {}
             void onAddBasket()          const {}
             void onEmptyDequeue()       const {}
-            void onNullBasket()         const {}
 
             void reset() {}
             empty_stat& operator +=( empty_stat const& )
@@ -208,46 +198,6 @@ namespace cds { namespace intrusive {
                 return *this;
             }
             //@endcond
-        };
-
-        /// Atomics based insert policy
-
-        template <size_t C> struct Constant { size_t operator()(size_t) const { return C; } };
-        template <int A=1, int B=0> struct Linear { size_t operator()(size_t x) const { return A * x + B; } };
-        template<class Latency = Linear<10>>
-        struct atomics_insert {
-          static inline void delay(size_t s) {
-            volatile int x;
-            for(size_t i = 0; i < s; ++i) {
-              x = 0;
-            }
-          }
-
-          size_t m_latency;
-
-          atomics_insert(size_t threads=1) :
-               m_latency(Latency{}(threads)) {}
-
-          enum class InsertResult : uint8_t { NOT_NULL=0, FAILED_INSERT=1, SUCCESSFUL_INSERT=2, RETRY=3 };
-
-          template <class MemoryModel, class MarkedPtr>
-          InsertResult _(MarkedPtr old_node, MarkedPtr new_node, MarkedPtr& next_value) const {
-            new_node->m_pNext.store(MarkedPtr{}, MemoryModel::memory_order_relaxed);
-            auto& old = old_node->m_pNext;
-            MarkedPtr pNext = old.load(MemoryModel::memory_order_acquire);
-            if (pNext.ptr() != nullptr) {
-              next_value = pNext;
-              return InsertResult::NOT_NULL;
-            }
-            delay(m_latency);
-            bool res = old.compare_exchange_strong(pNext, new_node, MemoryModel::memory_order_release, MemoryModel::memory_order_relaxed);
-            if (!res) {
-              next_value = pNext;
-              return InsertResult::FAILED_INSERT;
-            } else {
-              return InsertResult::SUCCESSFUL_INSERT;
-            }
-          }
         };
 
         /// BasketQueue default type traits
@@ -278,8 +228,6 @@ namespace cds { namespace intrusive {
                 or \p opt::v::sequential_consistent (sequentially consisnent memory model).
             */
             typedef opt::v::relaxed_ordering        memory_model;
-
-            typedef atomics_insert<>    insert_policy;
 
             /// Link checking, see \p cds::opt::link_checker
             static constexpr const opt::link_check_type link_checker = opt::debug_check_link;
@@ -475,7 +423,6 @@ namespace cds { namespace intrusive {
         typedef typename traits::item_counter   item_counter; ///< Item counting policy used
         typedef typename traits::stat           stat;         ///< Internal statistics policy used
         typedef typename traits::memory_model   memory_model; ///< Memory ordering. See cds::opt::memory_model option
-        typedef typename traits::insert_policy insert_policy;
 
         /// Rebind template arguments
         template <typename GC2, typename T2, typename Traits2>
@@ -510,8 +457,6 @@ namespace cds { namespace intrusive {
         stat                m_Stat  ;           ///< Internal statistics
         //@cond
         size_t const        m_nMaxHops;
-        size_t              m_nThreads = 1;
-        typename traits::insert_policy m_insert_policy;
         //@endcond
 
         //@cond
@@ -645,7 +590,6 @@ namespace cds { namespace intrusive {
             : m_pHead( &m_Dummy )
             , m_pTail( &m_Dummy )
             , m_nMaxHops( 3 )
-            , m_insert_policy(0)
         {}
 
         /// Destructor clears the queue
@@ -678,11 +622,6 @@ namespace cds { namespace intrusive {
             dispose_node( pHead );
         }
 
-        void set_threads(size_t s) {
-          m_nThreads = s;
-          m_insert_policy = typename traits::insert_policy{m_nThreads};
-        }
-
         /// Enqueues \p val value into the queue.
         /** @anchor cds_intrusive_BasketQueue_enqueue
             The function always returns \p true.
@@ -690,22 +629,21 @@ namespace cds { namespace intrusive {
         bool enqueue( value_type& val )
         {
             node_type * pNew = node_traits::to_node_ptr( val );
-            auto my_uuid = uuid();
             link_checker::is_empty( pNew );
 
             typename gc::Guard guard;
             typename gc::Guard gNext;
             back_off bkoff;
 
-            marked_ptr t, pNext;
+            marked_ptr t;
             while ( true ) {
-                pNew->m_basket_id = my_uuid;
                 t = guard.protect( m_pTail, []( marked_ptr p ) -> value_type * { return node_traits::to_value_ptr( p.ptr());});
 
-                auto res = m_insert_policy.template _<memory_model>(t, marked_ptr(pNew), pNext);
+                marked_ptr pNext = t->m_pNext.load(memory_model::memory_order_relaxed );
 
-                if ( res != insert_policy::InsertResult::NOT_NULL ) {
-                    if (res == insert_policy::InsertResult::SUCCESSFUL_INSERT) {
+                if ( pNext.ptr() == nullptr ) {
+                    pNew->m_pNext.store( marked_ptr(), memory_model::memory_order_relaxed );
+                    if ( t->m_pNext.compare_exchange_weak( pNext, marked_ptr(pNew), memory_model::memory_order_release, atomics::memory_order_relaxed )) {
                         if ( !m_pTail.compare_exchange_strong( t, marked_ptr(pNew), memory_model::memory_order_release, atomics::memory_order_relaxed ))
                             m_Stat.onAdvanceTailFailed();
                         break;
@@ -719,13 +657,12 @@ namespace cds { namespace intrusive {
                     pNext = gNext.protect( t->m_pNext, []( marked_ptr p ) -> value_type * { return node_traits::to_value_ptr( p.ptr());});
 
                     // add to the basket
-                    //if ( m_pTail.load( memory_model::memory_order_relaxed ) == t &&
-                    if ( t->m_pNext.load( memory_model::memory_order_relaxed) == pNext
+                    if ( m_pTail.load( memory_model::memory_order_relaxed ) == t
+                         && t->m_pNext.load( memory_model::memory_order_relaxed) == pNext
                          && !pNext.bits())
                     {
                         bkoff();
                         pNew->m_pNext.store( pNext, memory_model::memory_order_relaxed );
-                        pNew->m_basket_id = pNext->m_basket_id;
                         if ( t->m_pNext.compare_exchange_weak( pNext, marked_ptr( pNew ), memory_model::memory_order_release, atomics::memory_order_relaxed )) {
                             m_Stat.onAddBasket();
                             break;

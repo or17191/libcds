@@ -10,7 +10,7 @@
 #include <memory>
 
 #include <cds/container/details/base.h>
-#include <cds/container/basket_queue.h>
+#include <cds/container/sb_basket_queue.h>
 #include <cds/details/marked_ptr.h>
 
 namespace cds { namespace container {
@@ -47,7 +47,7 @@ namespace cds { namespace container {
             */
             typedef opt::v::relaxed_ordering    memory_model;
 
-            typedef cds::intrusive::basket_queue::atomics_insert<>    insert_policy;
+            typedef sb_basket_queue::atomics_insert<>    insert_policy;
 
             /// Padding for internal critical atomic data. Default is \p opt::cache_line_padding
             enum { padding = opt::cache_line_padding };

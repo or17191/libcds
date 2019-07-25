@@ -279,7 +279,7 @@ namespace {
 
     //using SBSimpleBasketQueue_HP = cds::container::SBBasketQueue<gc_type, value_type, SimpleBag>;
     struct cas_id_traits : cds::container::sb_basket_queue::traits {
-      typedef cds::intrusive::basket_queue::atomics_insert<Constant<350>> insert_policy;
+      typedef sb_basket_queue::atomics_insert<Constant<350>> insert_policy;
       //typedef cds::intrusive::basket_queue::atomics_insert<Constant<720>> insert_policy;
       //typedef cds::intrusive::basket_queue::atomics_insert<Constant<440>> insert_policy;
     };

@@ -10,6 +10,7 @@
 
 #include <cds/intrusive/basket_queue.h>
 #include <cds/details/memkind_allocator.h>
+#include <cds/algo/uuid.h>
 #include <cds/sync/htm.h>
 
 namespace cds { namespace container {
@@ -131,15 +132,18 @@ namespace cds { namespace container {
         struct stat : public intrusive::basket_queue::stat<Counter>
         {
             using base_type = intrusive::basket_queue::stat<Counter>;
-            typename base_type::counter_type m_FalseExtract;    ///< Count the number of times an extract failed
-            typename base_type::counter_type m_FreeNode;    ///< Count the number of times an extract failed
-            typename base_type::counter_type m_SameNodeExtract;
-            typename base_type::counter_type m_RetryInsert;
+            using counter_type = typename base_type::counter_type;
+            counter_type m_FalseExtract;    ///< Count the number of times an extract failed
+            counter_type m_FreeNode;    ///< Count the number of times an extract failed
+            counter_type m_SameNodeExtract;
+            counter_type m_RetryInsert;
+            counter_type m_NullBasket;
 
             void onFalseExtract()           { ++m_FalseExtract; }
             void onFreeNode()           { ++m_FreeNode; }
             void onSameNodeExtract() { ++m_SameNodeExtract; }
             void onRetryInsert() { ++m_RetryInsert; }
+            void onNullBasket() { ++m_NullBasket; }
 
             base_type& base() { return static_cast<base_type&>(*this); }
             const base_type& base () const { return static_cast<const base_type&>(*this); }
@@ -153,6 +157,7 @@ namespace cds { namespace container {
                 m_FreeNode.reset();
                 m_SameNodeExtract.reset();
                 m_RetryInsert.reset();
+                m_NullBasket.reset();
             }
 
             stat& operator +=( stat const& s )
@@ -162,6 +167,7 @@ namespace cds { namespace container {
                 m_FreeNode    += s.m_FreeNode.get();
                 m_SameNodeExtract += s.m_SameNodeExtract.get();
                 m_RetryInsert += s.m_RetryInsert.get();
+                m_NullBasket += s.m_NullBasket.get();
                 return *this;
             }
             //@endcond
@@ -175,6 +181,7 @@ namespace cds { namespace container {
             void onFreeNode()       const {}
             void onSameNodeExtract() const {}
             void onRetryInsert() const {}
+            void onNullBasket() const {}
 
             empty_stat& operator +=( empty_stat const& )
             {

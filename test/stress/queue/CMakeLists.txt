@@ -19,7 +19,6 @@ set(CDSSTRESS_QUEUE_PUSH_SOURCES
     ../main.cpp
     push.cpp
     sb_push.cpp
-    intrusive_push.cpp
 )
 add_executable(${CDSSTRESS_QUEUE_PUSH} ${CDSSTRESS_QUEUE_PUSH_SOURCES})
 target_link_libraries(${CDSSTRESS_QUEUE_PUSH} ${CDS_TEST_LIBRARIES} ${CDSSTRESS_FRAMEWORK_LIBRARY})
