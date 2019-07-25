@@ -497,8 +497,11 @@ namespace {
         test( q ); \
         queue_type::gc::force_dispose(); \
     }
-    template <class Fixture>
-    using VanillaBasketQueue = typename queue::Types<typename Fixture::value_type*>::BasketQueue_HP;
+    struct vanilla_traits : cds::container::basket_queue::traits {
+      using allocator = cds::details::memkind_allocator<int>;
+    };
+    template<class Fixture>
+    using VanillaBasketQueue = cds::container::BasketQueue<typename Fixture::gc_type, typename Fixture::value_type*, vanilla_traits>;
     CDSSTRESS_QUEUE_F( VanillaBasketQueue )
 
 

@@ -377,7 +377,10 @@ namespace {
         test( q , std::false_type{}); \
         QueueType::gc::force_dispose(); \
     }
-    using VanillaBasketQueue = typename queue::Types<value_type*>::BasketQueue_HP;
+    struct vanilla_traits : cds::container::basket_queue::traits {
+      using allocator = cds::details::memkind_allocator<int>;
+    };
+    using VanillaBasketQueue = cds::container::BasketQueue<cds::gc::HP, value_type*, vanilla_traits>;
     CDSSTRESS_QUEUE_F( VanillaBasketQueue )
 /*
     struct stat_block_queue : public cds::container::sb_block_basket_queue::traits {
