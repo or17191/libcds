@@ -5,7 +5,7 @@ source ${HOME}/.zshrc
 set +x
 
 # tnums=(1 2 4 8 12 16 20 24 28 32 36 40)
-tnums=(1 2 $(seq 4 4 80))
+tnums=(1 2 $(seq 4 4 88))
 # N=30
 N=5
 

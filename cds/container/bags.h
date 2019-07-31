@@ -156,7 +156,7 @@ namespace cds { namespace container {
             using atomic_ptr_t = std::atomic<ptr_t>;
 
             using value_type = PaddedValue<atomic_ptr_t>;
-            static constexpr size_t MAX_THREADS=40;
+            static constexpr size_t MAX_THREADS=44;
             std::array<value_type, MAX_THREADS> m_bag;
             TwicePaddedValue<std::atomic<size_t>> counter{0};
             TwicePaddedValue<std::atomic<bool>> exhaust{false};
@@ -294,7 +294,7 @@ namespace cds { namespace container {
             using atomic_ptr_t = std::atomic<ptr_t>;
 
             using value_type = PaddedValue<atomic_ptr_t>;
-            static constexpr size_t MAX_THREADS=40;
+            static constexpr size_t MAX_THREADS=44;
             std::array<value_type, MAX_THREADS> m_bag;
             TwicePaddedValue<std::atomic<size_t>> counter{0};
             TwicePaddedValue<std::atomic<bool>> exhaust{false};
