@@ -40,24 +40,16 @@ namespace {
         size_t nWriterNo;
     };
 
-    struct writer_compare {
-      const std::less<size_t> cmp;
-      using pair = std::pair<old_value*, size_t>;
-      bool operator()(const pair& v, size_t writer) const { return cmp(v.first->nWriterNo, writer); }
-      bool operator()(size_t writer, const pair& v) const { return cmp(writer, v.first->nWriterNo); }
-      bool operator()(const pair& lhs, const pair& rhs) const { return cmp(lhs.first->nWriterNo, rhs.first->nWriterNo); }
-    };
+    template<class Queue, class Value>
+    static bool push(Queue& queue, Value&& value, size_t id,
+        decltype(std::declval<Queue>().enqueue(std::forward<Value>(value), id))* = nullptr) {
+      return queue.enqueue(std::forward<Value>(value), id);
+    }
 
-    template <class Queue>
-    size_t push_many(Queue& queue, const size_t first, const size_t last, const size_t producer,
-        typename Queue::value_type* values) {
-      size_t failed = 0;
-      for(size_t i = first; i < last; ++i, ++values) {
-        while(!queue.push(values, producer)) {
-          ++failed;
-        }
-      }
-      return failed;
+    template<class Queue, class Value>
+    static bool push(Queue& queue, Value&& value, size_t id,
+        decltype(std::declval<Queue>().enqueue(std::forward<Value>(value)))* = nullptr) {
+      return queue.enqueue(std::forward<Value>(value));
     }
 
     template<class Queue, class Value>
@@ -71,6 +63,35 @@ namespace {
         decltype(std::declval<Queue>().dequeue(std::forward<Value>(value), id))* = nullptr) {
       basket = 0;
       return queue.dequeue(std::forward<Value>(value), id);
+    }
+
+    template<class Queue, class Value, class HasBaskets>
+    static bool pop(Queue& queue, Value&& value, size_t id, cds::uuid_type& basket, HasBaskets,
+        decltype(std::declval<Queue>().dequeue(std::forward<Value>(value)))* = nullptr) {
+      return queue.dequeue(std::forward<Value>(value));
+    }
+
+    template<class T>
+    using safe_add_pointer = std::add_pointer<typename std::remove_pointer<T>::type>;
+
+    struct writer_compare {
+      const std::less<size_t> cmp;
+      using pair = std::pair<old_value*, size_t>;
+      bool operator()(const pair& v, size_t writer) const { return cmp(v.first->nWriterNo, writer); }
+      bool operator()(size_t writer, const pair& v) const { return cmp(writer, v.first->nWriterNo); }
+      bool operator()(const pair& lhs, const pair& rhs) const { return cmp(lhs.first->nWriterNo, rhs.first->nWriterNo); }
+    };
+
+    template <class Queue>
+    size_t push_many(Queue& queue, const size_t first, const size_t last, const size_t producer,
+        typename safe_add_pointer<typename Queue::value_type>::type values) {
+      size_t failed = 0;
+      for(size_t i = first; i < last; ++i, ++values) {
+        while(!push(queue, values, producer)) {
+          ++failed;
+        }
+      }
+      return failed;
     }
 
     template <class Value>
@@ -149,7 +170,7 @@ namespace {
             size_t              m_nWriterId;
             size_t              m_nThreadId;
             duration_type       m_Duration;
-            typename Queue::value_type*    m_values{};
+            typename safe_add_pointer<typename Queue::value_type>::type    m_values{};
         };
 
         template <class Queue, class HasBasket>
@@ -167,7 +188,7 @@ namespace {
             size_t              m_nThreadId;
             duration_type       m_Duration;
 
-            typedef std::vector<std::pair<typename Queue::value_type*, size_t>> popped_data;
+            typedef std::vector<std::pair<typename safe_add_pointer<typename Queue::value_type>::type, size_t>> popped_data;
             typedef std::vector<size_t>::iterator       data_iterator;
             typedef std::vector<size_t>::const_iterator const_data_iterator;
 
@@ -327,8 +348,11 @@ namespace {
             propout() << std::make_pair("empty_pops", nPopFalse);
 
             EXPECT_EQ( nTotalPops + nPostTestPops, s_nQueueSize + s_nPreStoreSize) << "nTotalPops=" << nTotalPops << ", nPostTestPops=" << nPostTestPops;
-            value_type* v;
-            EXPECT_FALSE( q.pop(v, 0));
+            {
+              value_type* v;
+              cds::uuid_type basket;
+              EXPECT_FALSE( pop(q, v, 0, basket, HasBaskets{}));
+            }
 
             // Test consistency of popped sequence
             for ( size_t nWriter = 0; nWriter < s_nProducerThreadCount; ++nWriter ) {
@@ -426,7 +450,7 @@ namespace {
         }
 
         template <class Queue, class HasBaskets>
-        void test_queue( Queue& q, typename Queue::value_type* values, bool independent_ids, bool sequential_pre_store, HasBaskets )
+        void test_queue( Queue& q, typename safe_add_pointer<typename Queue::value_type>::type values, bool independent_ids, bool sequential_pre_store, HasBaskets )
         {
             typedef Consumer<Queue, HasBaskets> consumer_type;
             typedef Producer<Queue> producer_type;
@@ -497,7 +521,7 @@ namespace {
         template <class Queue, class HasBaskets>
         void test( Queue& q, bool independent_ids, bool sequential_pre_store, HasBaskets hb)
         {
-            cds::details::memkind_vector<typename Queue::value_type> values(s_nQueueSize + s_nPreStoreSize);
+            cds::details::memkind_vector<typename std::remove_pointer<typename Queue::value_type>::type> values(s_nQueueSize + s_nPreStoreSize);
             test_queue( q , values.data(), independent_ids, sequential_pre_store, hb);
             analyze( q , hb);
             propout() << q.statistics();
@@ -683,5 +707,17 @@ namespace {
 
 #undef CDSSTRESS_Queue_F
 
+    struct vanilla_traits : cds::container::basket_queue::traits {
+      using allocator = cds::details::memkind_allocator<int>;
+    };
+    template<class Fixture>
+    using VanillaBasketQueue = cds::container::BasketQueue<typename Fixture::gc_type, typename Fixture::value_type*, vanilla_traits>;
+    TEST_F( simple_sb_queue_push_pop, VanillaBasketQueue )
+    {
+        typedef VanillaBasketQueue<simple_sb_queue_push_pop> queue_type;
+        ASSERT_EQ(s_nConsumerThreadCount, s_nProducerThreadCount);
+        queue_type queue;
+        test( queue, false , false, std::false_type{});
+    }
 
 } // namespace
