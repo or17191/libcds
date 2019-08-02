@@ -330,7 +330,7 @@ namespace {
     using SBIdBasketQueue_HP_Stat = cds::container::SBBasketQueue<gc_type, value_type, IdBag, stat_traits>;
 
    // CDSSTRESS_QUEUE_F( SBSimpleBasketQueue_HP)
-    CDSSTRESS_QUEUE_F( FastSBIdBasketQueue_HP)
+    //CDSSTRESS_QUEUE_F( FastSBIdBasketQueue_HP)
     CDSSTRESS_QUEUE_F( SlowSBIdBasketQueue_HP)
     //CDSSTRESS_QUEUE_F( SBStackBasketQueue_HP)
 
@@ -338,7 +338,7 @@ namespace {
 
 #ifdef CDS_HTM_SUPPORT
     //CDSSTRESS_QUEUE_F( HTMSBSimpleBasketQueue_HP)
-    CDSSTRESS_QUEUE_F( FastHTMSBIdBasketQueue_HP)
+    //CDSSTRESS_QUEUE_F( FastHTMSBIdBasketQueue_HP)
     CDSSTRESS_QUEUE_F( SlowHTMSBIdBasketQueue_HP)
     CDSSTRESS_QUEUE_F( HTMSBIdBasketQueue_HP_Stat)
     //CDSSTRESS_QUEUE_F( HTMSBStackBasketQueue_HP)
