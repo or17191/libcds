@@ -76,7 +76,8 @@ namespace cds { namespace container {
             auto& old = old_node->m_pNext;
             int ret;
             MarkedPtr pNext;
-            while(true) {
+            constexpr size_t MAX_TXN = 10;
+            for(int i = 0; i < MAX_TXN; ++i) {
               if ((ret = _xbegin()) == _XBEGIN_STARTED) {
                 if(_xbegin() == _XBEGIN_STARTED) {
                   pNext = old.load(std::memory_order_relaxed);
@@ -111,7 +112,14 @@ namespace cds { namespace container {
                 return InsertResult::RETRY;
               }
             }
-            __builtin_unreachable();
+            pNext = MarkedPtr{nullptr, 0};
+            bool res = old.compare_exchange_strong(pNext, new_node);
+            if (!res) {
+              new_value = pNext;
+              return InsertResult::FAILED_INSERT;
+            } else {
+              return InsertResult::SUCCESSFUL_INSERT;
+            }
           }
         };
 
