@@ -47,7 +47,7 @@ namespace cds { namespace container {
             MarkedPtr pNext = old.load(MemoryModel::memory_order_acquire);
             if (pNext.ptr() != nullptr) {
               next_value = pNext;
-              return InsertResult::NOT_NULL;
+              return InsertResult::FAILED_INSERT;
             }
             delay(m_latency);
             bool res = old.compare_exchange_strong(pNext, new_node, MemoryModel::memory_order_release, MemoryModel::memory_order_relaxed);
@@ -72,11 +72,11 @@ namespace cds { namespace container {
                m_final_latency(FinalLatency{}(threads)) {}
 
           template <class MemoryModel, class MarkedPtr>
-          InsertResult _(MarkedPtr old_node, MarkedPtr new_node, MarkedPtr& new_value) const {
+          InsertResult _(MarkedPtr old_node, const MarkedPtr new_node, MarkedPtr& new_value) const {
             auto& old = old_node->m_pNext;
             int ret;
             MarkedPtr pNext;
-            constexpr size_t MAX_TXN = 10;
+            constexpr size_t MAX_TXN = 5;
             for(int i = 0; i < MAX_TXN; ++i) {
               if ((ret = _xbegin()) == _XBEGIN_STARTED) {
                 if(_xbegin() == _XBEGIN_STARTED) {
@@ -109,11 +109,16 @@ namespace cds { namespace container {
                   new_value = value;
                   return InsertResult::FAILED_INSERT;
                 }
-                return InsertResult::RETRY;
+                //return InsertResult::RETRY;
               }
             }
-            pNext = MarkedPtr{nullptr, 0};
-            bool res = old.compare_exchange_strong(pNext, new_node);
+            pNext = old.load(MemoryModel::memory_order_acquire);
+            if (pNext.ptr() != nullptr) {
+              new_value = pNext;
+              return InsertResult::FAILED_INSERT;
+            }
+            bool res = old.compare_exchange_strong(pNext, new_node,
+                MemoryModel::memory_order_release, MemoryModel::memory_order_relaxed);
             if (!res) {
               new_value = pNext;
               return InsertResult::FAILED_INSERT;
@@ -590,18 +595,18 @@ namespace cds { namespace container {
                 if(pNext.ptr() != nullptr) {
                   res =  InsertResult::NOT_NULL;
                 } else {
-                  do {
+                  // do {
                     res = m_insert_policy.template _<memory_model>(t, marked_ptr(node_ptr.get()), pNext);
-                    if(res == InsertResult::RETRY) {
-                      tstat.onRetryInsert();
-                    } else {
-                      if( i > 0 && res == InsertResult::NOT_NULL) {
-                        res = InsertResult::FAILED_INSERT;
-                      }
-                      break;
-                    }
-                    ++i;
-                  } while(true);
+                  //  if(res == InsertResult::RETRY) {
+                  //    tstat.onRetryInsert();
+                  //  } else {
+                  //    if( i > 0 && res == InsertResult::NOT_NULL) {
+                  //      res = InsertResult::FAILED_INSERT;
+                  //    }
+                  //    break;
+                  //  }
+                  //  ++i;
+                  //} while(true);
                 }
 
                 if ( res == InsertResult::SUCCESSFUL_INSERT) {
