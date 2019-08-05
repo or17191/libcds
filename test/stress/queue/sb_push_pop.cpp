@@ -626,7 +626,7 @@ namespace {
     using NUMAWFQueue = cds::container::WFQueue<typename Fixture::value_type, numa_wf_queue>;
 
     CDSSTRESS_WFQueue_F( simple_sb_queue_push_pop, WFQueue)
-    CDSSTRESS_WFQueue_F( simple_sb_queue_push_pop, NUMAWFQueue)
+    //CDSSTRESS_WFQueue_F( simple_sb_queue_push_pop, NUMAWFQueue)
     CDSSTRESS_WFQueue_F( simple_sb_queue_push_pop, CCQueue)
 
 
