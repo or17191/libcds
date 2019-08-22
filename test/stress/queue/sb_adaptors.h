@@ -43,6 +43,13 @@ static bool pop(Queue &queue, Value &&value, size_t id, cds::uuid_type &basket, 
     return queue.dequeue(std::forward<Value>(value));
 }
 
+template <class Queue, class Value>
+static bool pop(Queue &queue, Value &&value, size_t id)
+{
+    cds::uuid_type basket;
+    return pop(queue, std::forward<Value>(value), id, basket, std::false_type{});
+}
+
 template <class T>
 using safe_add_pointer = std::add_pointer<typename std::remove_pointer<T>::type>;
 

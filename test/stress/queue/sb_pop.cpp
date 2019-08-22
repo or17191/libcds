@@ -21,6 +21,9 @@
 // Multi-threaded queue pop test
 namespace {
 
+using queue::push;
+using queue::pop;
+using queue::safe_add_pointer;
 using cds_test::utils::topology::Topology;
 static boost::optional<Topology> s_Topology;
 static size_t s_nThreadCount = 4;
