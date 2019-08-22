@@ -1,12 +1,9 @@
-#! /usr/bin/env zsh
+#! /usr/bin/env bash
 
-source ${HOME}/.zshrc
+set -eux
 
-set +x
-
-# tnums=(1 2 4 8 12 16 20 24 28 32 36 40)
-tnums=(1 2 $(seq 4 4 88))
-# N=30
+HW_COUNT=$(cat /proc/cpuinfo | grep '^processor' | wc -l)
+tnums=(1 2 $(seq 4 4 ${HW_COUNT}))
 N=5
 
 ## stress sync
@@ -63,7 +60,7 @@ function test_executable() {
       fi
     fi
     echo "TNUMS=${n}"
-    cp "test.conf.template" "test.conf";
+    cp "../test.conf.template" "test.conf";
     sed -i.bak "s/###/${n}/" "test.conf";
     sed -i.bak "s/@@@/$(( n/2 ))/" "test.conf";
 
