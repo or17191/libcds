@@ -79,10 +79,10 @@ function test_executable() {
 unset NOHT
 unset FORCE_NUMA
 
-# test_executable "stress-queue-push"
-# tar cvf results.push.tar memkind_*
-# test_executable "stress-queue-pop"
-# tar cvf results.pop.tar memkind_*
+test_executable "stress-queue-push"
+tar cvf results.push.tar memkind_*
+test_executable "stress-queue-pop"
+tar cvf results.pop.tar memkind_*
 
 export FORCE_NUMA=1
 test_executable "stress-queue-push"
