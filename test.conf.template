@@ -1,0 +1,22 @@
+[htm]
+ThreadCount = ###
+IncrementCount = 20000000
+
+[queue_random]
+ReaderCount = 20
+WriterCount = 20
+QueueSize = 20000000
+
+[sb_queue_push]
+ThreadCount = ###
+QueueSize = 4000000
+
+[sb_queue_pop]
+ThreadCount = ###
+QueueSize = 4000000
+
+[sb_queue_push_pop]
+ConsumerCount = @@@
+ProducerCount = @@@
+QueueSize = 4000000
+PreStore =  2000000
