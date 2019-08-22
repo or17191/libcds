@@ -41,23 +41,24 @@ function test_executable() {
    
   echo "Testing ${test_name}"
   echo "${tests}"
-  if [ $test_name = "stress-queue-push-pop" ]; then
-    # Pushers and poppers in different sockets
-    export FORCE_NUMA=
-    unset NOHT
-  else
-    # Only one type of thread, both in the same socket
-    unset FORCE_NUMA
-    unset NOHT
-  fi
+  echo "FORCE_NUMA=${FORCE_NUMA}"
+  echo "NOHT=${NOHT}"
 
   for n in $tnums; do
+    DIR="memkind_all_${n}";
+    echo "$DIR";
+    if [ -d "$DIR" ]; then
+      rm "${DIR}"/*
+    else
+      mkdir $DIR
+    fi
+
     if [ $test_name = "stress-queue-push-pop" ]; then
       if [ $n -eq 1 ]; then
         continue;
       fi
     else
-      if [ $n -gt 44 ]; then
+      if [ $n -gt 44 ] && [ -z ${FORCE_NUMA} ]; then
         continue;
       fi
     fi
@@ -66,22 +67,30 @@ function test_executable() {
     sed -i.bak "s/###/${n}/" "test.conf";
     sed -i.bak "s/@@@/$(( n/2 ))/" "test.conf";
 
-    DIR="memkind_all_${n}";
-    echo "$DIR";
-    [ -d "$DIR" ] || mkdir $DIR;
-    rm -f "${DIR}"/*
 
     for test in ${(@f)tests}; do
       echo "${test}"
+      # echo "${executable}" --gtest_filter="${test}" --gtest_output=xml:"${DIR}/res_${test}_${i}.xml" > "${DIR}/out_${test}_${i}.txt";
       for i in {1..${N}}; do
         echo "${i}";
         yes | "${executable}" --gtest_filter="${test}" --gtest_output=xml:"${DIR}/res_${test}_${i}.xml" > "${DIR}/out_${test}_${i}.txt";
       done
     done
   done 
-
-  unset FORCE_NUMA
-  unset NOHT
 }
 
-test_executable "stress-queue-$1"
+unset NOHT
+unset FORCE_NUMA
+
+# test_executable "stress-queue-push"
+# tar cvf results.push.tar memkind_*
+# test_executable "stress-queue-pop"
+# tar cvf results.pop.tar memkind_*
+
+export FORCE_NUMA=1
+test_executable "stress-queue-push"
+tar cvf results.push-numa.tar memkind_*
+# test_executable "stress-queue-push-pop"
+# tar cvf results.push-pop.tar memkind_*
+
+unset FORCE_NUMA
