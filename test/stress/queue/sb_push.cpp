@@ -24,6 +24,9 @@
 
 // Multi-threaded random queue test
 namespace {
+using queue::push;
+using queue::pop;
+using queue::safe_add_pointer;
 using cds_test::utils::topology::Topology;
 static size_t s_nThreadCount = 8;
 static size_t s_nQueueSize = 20000000; // no more than 20 million records
