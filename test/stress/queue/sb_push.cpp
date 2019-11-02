@@ -11,6 +11,7 @@
 
 #include <boost/optional.hpp>
 #include <cds/details/memkind_allocator.h>
+#include <cds/algo/backoff_strategy.h>
 
 #include <cds/container/bags.h>
 #include <cds/container/sb_basket_queue.h>
@@ -275,6 +276,23 @@ using FastSBIdBasketQueue_HP = cds::container::SBBasketQueue<gc_type, value_type
 struct slow_cas_id_traits : cds::container::sb_basket_queue::traits
 {
     typedef sb_basket_queue::atomics_insert<Constant<720>> insert_policy;
+    struct traits : cds::backoff::exponential_const_traits {
+        struct fast_path_backoff {
+            void operator()() const noexcept {
+                volatile int x;
+                for(size_t i = 0; i < 100; ++i) {
+                    x = 0;
+                }
+                (void)x;
+            }
+        };
+
+        enum: size_t {
+          lower_bound = 1,         ///< Minimum spinning limit
+          upper_bound = 16   ///< Maximum spinning limit
+        };
+    };
+    typedef cds::backoff::bounded_exponential<> back_off;
 };
 using SlowSBIdBasketQueue_HP = cds::container::SBBasketQueue<gc_type, value_type, IdBag, slow_cas_id_traits>;
 

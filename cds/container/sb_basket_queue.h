@@ -649,7 +649,6 @@ namespace cds { namespace container {
                     tstat.onTryAddBasket();
 
                     // add to the basket
-                    bkoff();
                     // if(cds_unlikely(th.last_node == node->m_basket_id)) {
                     //   std::stringstream s;
                     //   s << "Other bag " << std::hex << th.last_node << ' ' << node->m_basket_id << ' ' << id;
@@ -660,6 +659,7 @@ namespace cds { namespace container {
                         // th.last_node = node->m_basket_id;
                         break;
                     }
+                    bkoff();
                 }
 
                 {

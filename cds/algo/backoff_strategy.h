@@ -284,6 +284,58 @@ namespace cds {
             //@endcond
         };
 
+        template <typename Traits = exponential_const_traits >
+        class bounded_exponential
+        {
+        public:
+            typedef Traits     traits;   ///< Traits
+
+            typedef typename traits::fast_path_backoff  spin_backoff    ;   ///< spin (fast-path) back-off strategy
+
+        protected:
+            size_t  m_nExpCur   ;           ///< Current spin counter in range [traits::s_nExpMin, traits::s_nExpMax]
+
+            spin_backoff    m_bkSpin    ;   ///< Spinning (fast-path) phase back-off strategy
+
+        public:
+            /// Default ctor
+            bounded_exponential() noexcept
+                : m_nExpCur( traits::lower_bound )
+            {}
+
+            //@cond
+            void operator ()() noexcept(noexcept(std::declval<spin_backoff>()()))
+            {
+                for ( size_t n = 0; n < m_nExpCur; ++n )
+                    m_bkSpin();
+                m_nExpCur *= 2;
+                if ( m_nExpCur > traits::upper_bound  ) {
+                    m_nExpCur = traits::upper_bound;
+                }
+            }
+
+            template <typename Predicate>
+            bool operator()( Predicate pr ) noexcept(noexcept(std::declval<Predicate>()()) && noexcept(std::declval<spin_backoff>()()))
+            {
+                for ( size_t n = 0; n < m_nExpCur; ++n ) {
+                    if ( m_bkSpin(pr))
+                        return true;
+                }
+                m_nExpCur *= 2;
+                if ( m_nExpCur > traits::upper_bound  ) {
+                    m_nExpCur = traits::upper_bound;
+                }
+                return false;
+            }
+
+            void reset() noexcept( noexcept( std::declval<spin_backoff>().reset()))
+            {
+                m_nExpCur = traits::lower_bound;
+                m_bkSpin.reset();
+            }
+            //@endcond
+        };
+
         //@cond
         template <typename FastPathBkOff, typename SlowPathBkOff>
         struct make_exponential

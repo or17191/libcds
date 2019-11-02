@@ -38,24 +38,26 @@ function test_executable() {
    
   echo "Testing ${test_name}"
   echo "${tests}"
-  echo "FORCE_NUMA=${FORCE_NUMA}"
-  echo "NOHT=${NOHT}"
+  local force_numa=${FORCE_NUMA:-}
+  echo "FORCE_NUMA=${force_numa}"
+  local noht=${noht:-}
+  echo "NOHT=${noht}"
 
-  for n in $tnums; do
+  for n in ${tnums[@]}; do
     DIR="memkind_all_${n}";
     echo "$DIR";
-    if [ -d "$DIR" ]; then
+    if [ -d "$DIR" ] && [ "$(ls "$DIR")" ]; then
       rm "${DIR}"/*
-    else
-      mkdir $DIR
+    elif [ ! -d "$DIR"]; then
+      mkdir "$DIR"
     fi
 
-    if [ $test_name = "stress-queue-push-pop" ]; then
+    if [ "$test_name" == "stress-queue-push-pop" ]; then
       if [ $n -eq 1 ]; then
         continue;
       fi
     else
-      if [ $n -gt 44 ] && [ -z ${FORCE_NUMA} ]; then
+      if [ $n -gt 44 ] && [ -z "${force_numa}" ]; then
         continue;
       fi
     fi
@@ -65,14 +67,17 @@ function test_executable() {
     sed -i.bak "s/@@@/$(( n/2 ))/" "test.conf";
 
 
-    for test in ${(@f)tests}; do
+    while read "test"; do
       echo "${test}"
-      # echo "${executable}" --gtest_filter="${test}" --gtest_output=xml:"${DIR}/res_${test}_${i}.xml" > "${DIR}/out_${test}_${i}.txt";
-      for i in {1..${N}}; do
+      if [[ "${test}" == *"Vanilla"* ]] && [ "${n}" -gt 10 ]; then
+        continue;
+      fi
+      for i in $(seq 1 ${N}); do
         echo "${i}";
+        # echo "${executable}" --gtest_filter="${test}" --gtest_output=xml:"${DIR}/res_${test}_${i}.xml" > "${DIR}/out_${test}_${i}.txt";
         yes | "${executable}" --gtest_filter="${test}" --gtest_output=xml:"${DIR}/res_${test}_${i}.xml" > "${DIR}/out_${test}_${i}.txt";
       done
-    done
+    done <<< "$tests"
   done 
 }
 
@@ -81,12 +86,12 @@ unset FORCE_NUMA
 
 test_executable "stress-queue-push"
 tar cvf results.push.tar memkind_*
-test_executable "stress-queue-pop"
-tar cvf results.pop.tar memkind_*
+# test_executable "stress-queue-pop"
+# tar cvf results.pop.tar memkind_*
 
 export FORCE_NUMA=1
-test_executable "stress-queue-push"
-tar cvf results.push-numa.tar memkind_*
+# test_executable "stress-queue-push"
+# tar cvf results.push-numa.tar memkind_*
 # test_executable "stress-queue-push-pop"
 # tar cvf results.push-pop.tar memkind_*
 
