@@ -51,7 +51,7 @@ function test_executable() {
     echo "$DIR";
     if [ -d "$DIR" ] && [ "$(ls "$DIR")" ]; then
       rm "${DIR}"/*
-    elif [ ! -d "$DIR"]; then
+    elif [ ! -d "$DIR" ]; then
       mkdir "$DIR"
     fi
 
