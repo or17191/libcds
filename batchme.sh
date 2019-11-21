@@ -2,6 +2,9 @@
 
 set -eux
 
+cd $(dirname $0)
+cd build-release
+
 HW_COUNT=$(cat /proc/cpuinfo | grep '^processor' | wc -l)
 tnums=(1 2 $(seq 4 4 ${HW_COUNT}))
 N=5
@@ -57,7 +60,7 @@ function test_executable() {
         continue;
       fi
     else
-      if [ $n -gt 44 ] && [ -z "${force_numa}" ]; then
+      if [ $n -gt $(( HW_COUNT/2 ))  ] && [ -z "${force_numa}" ]; then
         continue;
       fi
     fi
