@@ -2,6 +2,7 @@
 
 set -eux
 
+ORIGINAL_ROOT=$(pwd)
 cd $(dirname $0)
 cd build-release
 
@@ -88,14 +89,14 @@ unset NOHT
 unset FORCE_NUMA
 
 test_executable "stress-queue-push"
-tar cvf results.push.tar memkind_*
-# test_executable "stress-queue-pop"
-# tar cvf results.pop.tar memkind_*
+tar cvf "${ORIGINAL_ROOT}/results.push.tar" memkind_*
+test_executable "stress-queue-pop"
+tar cvf "${ORIGINAL_ROOT}/results.pop.tar" memkind_*
 
 export FORCE_NUMA=1
 # test_executable "stress-queue-push"
 # tar cvf results.push-numa.tar memkind_*
 test_executable "stress-queue-push-pop"
-tar cvf results.push-pop.tar memkind_*
+tar cvf "${ORIGINAL_ROOT}/results.push-pop.tar" memkind_*
 
 unset FORCE_NUMA
