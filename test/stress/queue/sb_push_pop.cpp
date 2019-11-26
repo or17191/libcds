@@ -436,9 +436,7 @@ protected:
         setup_pool_ids<producer_type, consumer_type>(pool, independent_ids, values);
         s_nPreStoreDone = true;
         s_nProducerDone.store(0);
-        char x;
         std::cout << "[ PROMPT   ] PID = " << getpid() << std::endl;
-        std::cin >> x;
         std::chrono::milliseconds duration = pool.run();
 
         propout() << std::make_pair("producer_count", s_nProducerThreadCount)
