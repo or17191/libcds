@@ -22,6 +22,7 @@ option(WITH_TSAN "Build TSan instrumented code" OFF)
 option(ENABLE_UNIT_TEST "Enable unit test" ON)
 option(ENABLE_STRESS_TEST "Enable stress test" ON)
 option(OPTIMIZE_FOR_NATIVE "Compile for native" OFF)
+option(FORCE_RTM "Force RTM support" OFF)
 set(CMAKE_TARGET_ARCHITECTURE "" CACHE string "Target build architecture")
 
 find_package(Threads)
@@ -123,6 +124,10 @@ if(CMAKE_COMPILER_IS_GNUCXX OR CMAKE_CXX_COMPILER_ID STREQUAL "Clang" OR CMAKE_C
 
     if(OPTIMIZE_FOR_NATIVE)
         list(APPEND LIBCDS_PUBLIC_CXX_FLAGS "-march=native")
+    endif()
+
+    if(FORCE_RTM)
+        list(APPEND LIBCDS_PUBLIC_CXX_FLAGS "-mrtm")
     endif()
 
     if(CMAKE_TARGET_ARCHITECTURE STREQUAL "x86_64")
