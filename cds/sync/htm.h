@@ -68,13 +68,15 @@ namespace cds {
 
         template <class Transaction, class Fallback>
         htm_status htm(Transaction &&transaction, Fallback &&fallback, size_t tries) {
+            htm_status ret;
             for (size_t i = 0; i < tries; ++i) {
-                if (htm(std::forward<Transaction>(transaction))) {
-                    return true;
+                ret = htm(std::forward<Transaction>(transaction));
+                if (ret) {
+                    return ret;
                 }
             }
             fallback();
-            return false;
+            return ret;
         }
 
         template <class Transaction>
