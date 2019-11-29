@@ -9,6 +9,7 @@ cd build-release
 HW_COUNT=$(cat /proc/cpuinfo | grep '^processor' | wc -l)
 tnums=(1 2 $(seq 4 4 ${HW_COUNT}))
 N=5
+TIMOUT=600 # 10 mins
 
 ## stress sync
 # make stress-sync
@@ -70,6 +71,7 @@ function test_executable() {
     sed -i.bak "s/###/${n}/" "test.conf";
     sed -i.bak "s/@@@/$(( n/2 ))/" "test.conf";
 
+    set +e
 
     while read "test"; do
       echo "${test}"
@@ -79,9 +81,11 @@ function test_executable() {
       for i in $(seq 1 ${N}); do
         echo "${i}";
         # echo "${executable}" --gtest_filter="${test}" --gtest_output=xml:"${DIR}/res_${test}_${i}.xml" > "${DIR}/out_${test}_${i}.txt";
-        "${executable}" --gtest_filter="${test}" --gtest_output=xml:"${DIR}/res_${test}_${i}.xml" > "${DIR}/out_${test}_${i}.txt";
+        timeout "${TIMEOUT}" "${executable}" --gtest_filter="${test}" --gtest_output=xml:"${DIR}/res_${test}_${i}.xml" > "${DIR}/out_${test}_${i}.txt";
       done
     done <<< "$tests"
+
+    set -e
   done 
 }
 
