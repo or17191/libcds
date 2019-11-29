@@ -11,7 +11,7 @@ SOCKET_COUNT=$(grep 'physical id' /proc/cpuinfo | sort | uniq | wc -l)
 HW_COUNT=$(( HW_COUNT/SOCKET_COUNT*2 ))
 tnums=(1 2 $(seq 4 4 ${HW_COUNT}))
 N=5
-TIMOUT=600 # 10 mins
+TIMEOUT=600 # 10 mins
 
 ## stress sync
 # make stress-sync
