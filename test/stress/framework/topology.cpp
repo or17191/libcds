@@ -87,11 +87,12 @@ namespace topology {
             dir << "/topology/";
             std::size_t core = read_size(dir.str(), "core_id");
             std::size_t socket = read_size(dir.str(), "physical_package_id");
-            ++id;
             if (socket >= 2) {
+              ++id;
               continue; // Don't allow more than two sockets
             }
             ret.push_back(CPUInfo{id, core, socket});
+            ++id;
         }
         return ret;
     }
